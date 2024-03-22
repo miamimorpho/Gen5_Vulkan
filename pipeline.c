@@ -650,6 +650,10 @@ slow_descriptors_alloc(VkDevice l_dev, GfxPipeline *pipeline)
 int
 slow_descriptors_update(GfxContext context, uint32_t count,
 			ImageData *textures, GfxPipeline *pipeline)
+/* count is the quantity of unique texture files
+   the renderer is going to need to allocate GPU memory for
+   to use at one time
+ */
 {
   VkDescriptorImageInfo infos[count];
   VkWriteDescriptorSet writes[count];

@@ -120,6 +120,7 @@ int stage1_destroy(GfxContext context);
 int stage2_create(GfxContext context, GfxPipeline* pipeline);
 int stage2_destroy(GfxContext context, GfxPipeline pipeline);
 
+/* pipeline.c */
 int descriptor_pool_create(GfxContext context, VkDescriptorPool* descriptor_pool);
 int slow_descriptors_alloc(VkDevice l_dev, GfxPipeline *pipeline);
 int slow_descriptors_update(GfxContext context, uint32_t count,
@@ -129,7 +130,7 @@ void rapid_descriptors_update(GfxContext context, GfxPipeline pipeline,
 			      DeviceBuffer *transforms);
 /* Camera  */
 Camera camera_create(GfxContext context);
-int bird_mvp_calc(Camera cam, Entity entity, mat4 *dest);
+int fps_mvp_calc(Camera cam, Entity entity, mat4 *dest);
 
 /* memory.c */
 int buffer_create(GfxContext context, VkDeviceSize size,

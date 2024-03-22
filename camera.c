@@ -31,7 +31,7 @@ static_mvp_calc(Camera cam, Entity entity, mat4 *dest){
 }
 
 int
-bird_mvp_calc(Camera cam, Entity entity, mat4 *dest)
+fps_mvp_calc(Camera cam, Entity entity, mat4 *dest)
 {
   /* if you are doing m*vector then the order is (p*(v*(m*vector)))
    * so the pre multiplied matrix is p * (v*m)
@@ -42,28 +42,25 @@ bird_mvp_calc(Camera cam, Entity entity, mat4 *dest)
   mat4 model;
   glm_mat4_identity(model);
   glm_translate(model, entity.pos);
-  
-  //  float pitch_r = glm_rad(cam.pitch);
+
+  /*
+  float pitch_r = glm_rad(cam.pitch);
   float yaw_r = glm_rad(cam.yaw);
-
-  vec3 ground;
-  ground[0] = cam.pos[0];
-  ground[1] = cam.pos[1] - 10;
-  ground[2] = -1;
-
+  */
+  
+  vec3 front;
+  front[0] = cos(cam.yaw) * cos(cam.pitch);
+  front[1] = sin(cam.pitch);
+  front[2] = sin(cam.yaw) * cos(cam.pitch);
+  glm_vec3_normalize(front);
+  
   vec3 eye;
-  float translatedX = cam.pos[0] - ground[0];
-  float translatedY = cam.pos[1] - ground[1]; 
-
-  eye[0] = translatedX * cos(yaw_r) - translatedY * sin(yaw_r);
-  eye[1] = translatedX * sin(yaw_r) + translatedY * cos(yaw_r);
-
-  eye[0] += ground[0];
-  eye[1] += ground[1];
-  eye[2] = cam.pos[2];
-
+  eye[0] = cam.pos[0];// front[0];
+    eye[1] = cam.pos[1];// front[1];
+    eye[2] = cam.pos[2];// front[2];
+  
   mat4 view;
-  glm_lookat(eye, ground, (vec3){0.0f, 0.0f, -1.0f},
+  glm_look(eye, front, (vec3){0.0f, 1.0f, 0},
 	     view);
 
   mat4 vm; // view*model
@@ -83,9 +80,9 @@ camera_create(GfxContext context)
 {
   Camera camera;
   
-  glm_vec3_copy( (vec3){0.0f, 0.0f, -10.0f}, camera.pos );
+  glm_vec3_copy( (vec3){0.0f, 60.0f, 0.0f}, camera.pos );
 	 
-  camera.pitch = -90.0f;
+  camera.pitch = 0.0f;
   camera.yaw = 0.0f;
 
   camera.fov = glm_rad(90.0f);

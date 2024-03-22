@@ -204,7 +204,7 @@ draw_args_update(Camera cam, Entity *entities,
   for(int i = 0; i < count; i++){
     drawArgs *args_ptr = ((drawArgs*)buffer.first_index)+i;
     args_ptr->texture_index = entities[i].texture_index;
-    bird_mvp_calc(cam, entities[i],
+    fps_mvp_calc(cam, entities[i],
 		  &args_ptr->transform);
   }
  

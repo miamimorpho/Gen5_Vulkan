@@ -2,10 +2,10 @@
 #include <SDL2/SDL.h>
 
 Entity
-entity_duplicate(Entity mother, float x, float y){
+entity_duplicate(Entity mother, float x, float y, float z){
 
   Entity child;
-  glm_vec3_copy( (vec3){x, y, -1.0f}, child.pos);
+  glm_vec3_copy( (vec3){x, y, z}, child.pos);
   child.indices_len = mother.indices_len;
   child.first_index = mother.first_index;
   child.vertex_offset = mother.vertex_offset;
@@ -30,20 +30,18 @@ main(void)
   rapid_descriptors_alloc(context, &pipeline);
   
   Camera camera = camera_create(context);
-  
-  GeometryData geo = geometry_buffer_create(context);
-  ImageData textures[2];
-  Entity car;
-  gltf_load(context, "models/CarBroken.glb",
-	    &geo, textures, &car);
-  Entity car2;
-  gltf_load(context, "models/Car2.glb",
-	    &geo, textures, &car2);
 
-  int entity_c = 2;
+  /* Load gltf data to renderer */
+  int model_count = 1;
+  GeometryData geo = geometry_buffer_create(context);
+  ImageData textures[model_count];
+  Entity car;
+  gltf_load(context, "models/Duck.glb",
+	    &geo, textures, &car);
+
+  int entity_c = 1;
   Entity entities[entity_c];
-  entities[0] = entity_duplicate(car, 0, 0);
-  entities[1] = entity_duplicate(car2, 10, 0);
+  entities[0] = entity_duplicate(car, 0, 0, 30);
   
   /*
   int entity_c = 100;
@@ -55,7 +53,7 @@ main(void)
   }
   */
  
-  slow_descriptors_update(context, 2, textures, &pipeline);
+  slow_descriptors_update(context, model_count, textures, &pipeline);
   
   DeviceBuffer draw_args[context.frame_c];
   draw_args_create(context, pipeline, entity_c, draw_args);
@@ -64,9 +62,9 @@ main(void)
   indirect_buffer_create(context, entity_c, &indirect_b);
 
   /* Mouse Data */
-  double xvel = 0, yvel = 0;
+  double xvel = 0, yvel = 0, zvel = 0;
   double speed = 0.2;
-  float sensitivity = 0.05f;
+  float sensitivity = 0.002f;
   SDL_SetRelativeMouseMode(SDL_TRUE);
 
   /* Main rendering loop */
@@ -86,10 +84,10 @@ main(void)
 	xvel = -speed;
 	break;
       case SDLK_UP:
-	yvel = speed;
+	zvel = speed;
 	break;
       case SDLK_DOWN:
-	yvel = -speed;
+	zvel = -speed;
 	break;
       default:
 	break;
@@ -104,18 +102,18 @@ main(void)
        	if( xvel < 0 ) xvel = 0;
 	break;
       case SDLK_UP:
-	if( yvel > 0 ) yvel = 0;
+	if( zvel > 0 ) zvel = 0;
 	break;
       case SDLK_DOWN:
-	if( yvel < 0 ) yvel = 0;
+	if( zvel < 0 ) zvel = 0;
 	break;
       default:
 	break;
       } break;
 
     case SDL_MOUSEMOTION:
-      camera.pitch += event.motion.yrel * sensitivity;
-      camera.yaw -= event.motion.xrel * sensitivity;
+      camera.pitch -= event.motion.yrel * sensitivity;
+      camera.yaw += event.motion.xrel * sensitivity;
       break;
       
     case SDL_QUIT:
@@ -126,9 +124,20 @@ main(void)
       break;
   
     }
-    
+
+    /* Clamping of pitch and yaw */
+    while (camera.pitch > 89)
+      camera.pitch = 89;
+    while (camera.pitch < -89)
+      camera.pitch = -89;
+    while (camera.yaw < -180)
+      camera.yaw = 180;
+    while (camera.yaw > 190)
+      camera.yaw = -180;
+      
     camera.pos[0] += xvel;
     camera.pos[1] += yvel;
+    camera.pos[2] += zvel;
     
     draw_start(&context, pipeline, geo);
     
