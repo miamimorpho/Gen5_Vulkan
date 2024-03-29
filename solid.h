@@ -11,6 +11,8 @@ extern const int DEBUG;
 //extern const char *cfg_validation_layers[];
 extern const VkFormat cfg_format;
 
+extern const vec3 CAMERA_UP;
+
 /**
  * Configuration settings and states
  */
@@ -58,9 +60,9 @@ typedef struct {
 
 typedef struct {
   vec3 pos;
-  
-  float pitch;
-  float yaw;
+
+  vec3 up;
+  vec3 front;
   
   float fov;
   float aspect_ratio;

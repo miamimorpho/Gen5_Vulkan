@@ -265,7 +265,8 @@ devices_create(GfxContext *stage1)
     return 1;
   }
   if(dev_features.samplerAnisotropy){
-    //enabled_dev_features.samplerAnisotropy = VK_TRUE;
+    /* enabled_dev_features.samplerAnisotropy = VK_TRUE;
+       should be enabled by default */
     printf("\t[X] sampler anisotropy\n");
   }
   if(dev_features.multiDrawIndirect){

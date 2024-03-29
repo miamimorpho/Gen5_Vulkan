@@ -36,23 +36,17 @@ main(void)
   GeometryData geo = geometry_buffer_create(context);
   ImageData textures[model_count];
   Entity car;
-  gltf_load(context, "models/Duck.glb",
+  gltf_load(context, "models/Car2.glb",
 	    &geo, textures, &car);
 
-  int entity_c = 1;
-  Entity entities[entity_c];
-  entities[0] = entity_duplicate(car, 0, 0, 30);
   
-  /*
   int entity_c = 100;
   Entity entities[entity_c];
   for(int x = 0; x < 10; x++){
     for(int y = 0; y < 10; y++){
-      entities[(x * 10)+y] = entity_copy(car, x * 10, y * 10);
+      entities[(x * 10)+y] = entity_duplicate(car, x * 10, y * 10, 0);
     }
   }
-  */
- 
   slow_descriptors_update(context, model_count, textures, &pipeline);
   
   DeviceBuffer draw_args[context.frame_c];
@@ -62,11 +56,14 @@ main(void)
   indirect_buffer_create(context, entity_c, &indirect_b);
 
   /* Mouse Data */
-  double xvel = 0, yvel = 0, zvel = 0;
-  double speed = 0.2;
-  float sensitivity = 0.002f;
+  double front_vel = 0, strafe_vel = 0, speed = 0.2;
+  vec3 strafe;
+  float pitch = 0, yaw = 0, sensitivity = 0.001f;
+  float pitch_vel = 0, yaw_vel = 0;
   SDL_SetRelativeMouseMode(SDL_TRUE);
 
+  vec3 camera_front_delta;
+  
   /* Main rendering loop */
   int running = 1;
   SDL_Event event;
@@ -78,16 +75,16 @@ main(void)
     case SDL_KEYDOWN:
       switch( event.key.keysym.sym) {
       case SDLK_LEFT:
-	xvel = speed;
+	strafe_vel = -speed;
 	break;
       case SDLK_RIGHT:
-	xvel = -speed;
+	strafe_vel = speed;
 	break;
       case SDLK_UP:
-	zvel = speed;
+	front_vel = speed;
 	break;
       case SDLK_DOWN:
-	zvel = -speed;
+	front_vel = -speed;
 	break;
       default:
 	break;
@@ -96,24 +93,24 @@ main(void)
     case SDL_KEYUP:      
       switch( event.key.keysym.sym){
       case SDLK_LEFT:
-	if( xvel > 0 ) xvel = 0;
+	if( strafe_vel < 0 ) strafe_vel = 0;
 	break;
       case SDLK_RIGHT:
-       	if( xvel < 0 ) xvel = 0;
+       	if( strafe_vel > 0 ) strafe_vel = 0;
 	break;
       case SDLK_UP:
-	if( zvel > 0 ) zvel = 0;
+	if( front_vel > 0 ) front_vel = 0;
 	break;
       case SDLK_DOWN:
-	if( zvel < 0 ) zvel = 0;
+	if( front_vel < 0 ) front_vel = 0;
 	break;
       default:
 	break;
       } break;
 
     case SDL_MOUSEMOTION:
-      camera.pitch -= event.motion.yrel * sensitivity;
-      camera.yaw += event.motion.xrel * sensitivity;
+      yaw_vel = event.motion.xrel * sensitivity;
+      pitch_vel = event.motion.yrel * sensitivity;
       break;
       
     case SDL_QUIT:
@@ -125,20 +122,36 @@ main(void)
   
     }
 
-    /* Clamping of pitch and yaw */
-    while (camera.pitch > 89)
-      camera.pitch = 89;
-    while (camera.pitch < -89)
-      camera.pitch = -89;
-    while (camera.yaw < -180)
-      camera.yaw = 180;
-    while (camera.yaw > 190)
-      camera.yaw = -180;
+    /* Mouse/Camera Settings */
+
+    pitch += pitch_vel;
+    yaw += yaw_vel;
+    camera.front[0] = cos(pitch) * cos(yaw);
+    camera.front[1] = sin(pitch);
+    camera.front[2] = sin(yaw) * cos(pitch);
+    glm_vec3_normalize(camera.front);   
+    pitch_vel = 0;
+    yaw_vel = 0;
+
+    while(pitch >= GLM_PI / 2 )
+      pitch = ((GLM_PI / 2) - 0.1);
+    while(pitch <= -(GLM_PI / 2))
+      pitch = -((GLM_PI / 2)  - 0.1);
+    while(yaw >= GLM_PI * 2)
+      yaw = 0;
+    while(yaw <= -GLM_PI * 2)
+      yaw = 0;
       
-    camera.pos[0] += xvel;
-    camera.pos[1] += yvel;
-    camera.pos[2] += zvel;
-    
+    /* Clamping of pitch and yaw */
+    //printf("pitch, yaw :%f %f\n", pitch, yaw);
+    printf("front :%f %f %f\n", camera.front[0], camera.front[1], camera.front[2]);
+    glm_vec3_cross(camera.front, (vec3){0.0f, 0.0f, -1.0f}, strafe);
+    glm_vec3_cross(strafe, camera.front, camera.up);
+    camera.pos[0] += camera.front[0] * front_vel;
+    camera.pos[1] += camera.front[1] * front_vel;
+    camera.pos[0] += strafe[0] * strafe_vel;
+    camera.pos[1] += strafe[1] * strafe_vel;
+   
     draw_start(&context, pipeline, geo);
     
     /* Slow / Global Data */
