@@ -63,6 +63,7 @@ typedef struct {
 
   vec3 up;
   vec3 front;
+  vec3 right;
   
   float fov;
   float aspect_ratio;
@@ -111,6 +112,7 @@ typedef struct{
 /** Maths */
 typedef struct{
   vec3 pos;
+  vec3 normal;
   vec2 tex;
 } vertex;
 
@@ -133,6 +135,7 @@ void rapid_descriptors_update(GfxContext context, GfxPipeline pipeline,
 /* Camera  */
 Camera camera_create(GfxContext context);
 int fps_mvp_calc(Camera cam, Entity entity, mat4 *dest);
+int camera_rotate(Camera *cam, float x_vel, float y_vel);
 
 /* memory.c */
 int buffer_create(GfxContext context, VkDeviceSize size,

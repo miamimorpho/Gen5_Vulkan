@@ -303,7 +303,7 @@ pipeline_create(GfxContext context, GfxPipeline *gfx)
   };
 
   // Vertex Buffer Creation
-  VkVertexInputAttributeDescription attribute_descriptions[2];
+  VkVertexInputAttributeDescription attribute_descriptions[3];
   attribute_descriptions[0].binding = 0;
   attribute_descriptions[0].location = 0;
   attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -311,9 +311,14 @@ pipeline_create(GfxContext context, GfxPipeline *gfx)
 
   attribute_descriptions[1].binding = 0;
   attribute_descriptions[1].location = 1;
-  attribute_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-  attribute_descriptions[1].offset = offsetof(vertex, tex);
+  attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+  attribute_descriptions[1].offset = offsetof(vertex, normal);
 
+  attribute_descriptions[2].binding = 0;
+  attribute_descriptions[2].location = 2;
+  attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+  attribute_descriptions[2].offset = offsetof(vertex, tex);
+  
   VkVertexInputBindingDescription binding_description = {
     .binding = 0,
     .stride = sizeof(vertex),
@@ -323,7 +328,7 @@ pipeline_create(GfxContext context, GfxPipeline *gfx)
   VkPipelineVertexInputStateCreateInfo vertex_input_info = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     .vertexBindingDescriptionCount = 1,
-    .vertexAttributeDescriptionCount = 2,
+    .vertexAttributeDescriptionCount = 3,
     .pVertexBindingDescriptions = &binding_description,
     .pVertexAttributeDescriptions = attribute_descriptions,
   };

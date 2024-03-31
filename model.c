@@ -200,6 +200,7 @@ gltf_skin_load(GfxContext context, cgltf_data* file, ImageData *texture)
  /* Load image skin textures */
   cgltf_buffer_view* view = NULL;
   for(cgltf_size i = 0 ; i < file->images_count; i++){
+    printf("texture MIME type: %s\n", file->images[i].mime_type);
     if(strcmp(file->images[i].mime_type, "image/png") == 0){
       view = file->images[i].buffer_view;
       break;
@@ -292,6 +293,7 @@ gltf_skin_load(GfxContext context, cgltf_data* file, ImageData *texture)
 int
 gltf_mesh_load(cgltf_data* data, GeometryData *geo, Entity *component)
 {
+  /* currently only loads 1 mesh per model */
   uint32_t mesh_index = 0;
   uint32_t primitive_index = 0;
 
@@ -301,38 +303,64 @@ gltf_mesh_load(cgltf_data* data, GeometryData *geo, Entity *component)
   /* Search for attributes accessors */
   int pos_index = 0;
   int tex_index = 0;
+  int normal_index = 0;
+  int color_index = 0;
   for(size_t attrib_i = 0; attrib_i < primitive->attributes_count; attrib_i++){
     cgltf_attribute_type attribute = primitive->attributes[attrib_i].type;
 
-    if(attribute == cgltf_attribute_type_position)
+    if(attribute == cgltf_attribute_type_position){
       pos_index = attrib_i;
+      printf("found vertices\n");
+    }
+      
+    if(attribute == cgltf_attribute_type_normal){
+      normal_index = attrib_i;
+      printf("found normals\n");
+    }
+
+    if(attribute == cgltf_attribute_type_color){
+      color_index = attrib_i;
+      printf("found colours\n");
+    }
     
-    if(attribute == cgltf_attribute_type_texcoord)
+    if(attribute == cgltf_attribute_type_texcoord){
       tex_index = attrib_i;
-    
+      printf("found texture coords\n");
+    }
+ 
   }
 
   /* load attributes into vertex buffer
-   * position data */
+   * starting with position data */
   cgltf_accessor* pos_accessor = data->meshes[mesh_index]
     .primitives[0]
     .attributes[pos_index].data;
   int float_count = pos_accessor->count * 3;
   float pos_data[float_count];
-  //float* pos_data = (float*)malloc(float_count * sizeof(float));
   cgltf_accessor_unpack_floats(pos_accessor, pos_data, float_count);
   
   /* textures data */
   cgltf_accessor* tex_accessor = data->meshes[mesh_index]
     .primitives[primitive_index].attributes[tex_index].data;
   float tex_data[float_count];
-  //float* tex_data = (float*)malloc(float_count * sizeof(float));
   cgltf_accessor_unpack_floats(tex_accessor, tex_data, float_count);
+
+  /* normals */
+  cgltf_accessor* normal_accessor = data->meshes[mesh_index]
+    .primitives[primitive_index].attributes[normal_index].data;
+  float normal_data[float_count];
+  cgltf_accessor_unpack_floats(normal_accessor, normal_data, float_count);
+
+  /* position and normal are 3D 32bit numbers
+   * textures are 2D 32bit numbers
+   */
   
   vertex vertices[pos_accessor->count];
   for(size_t i = 0; i < pos_accessor->count; i++){
     vertex v = {
       .pos = {pos_data[i * 3 ], pos_data[i * 3 +1 ], pos_data[i * 3 +2 ] },
+      .normal =
+      {normal_data[i * 3], normal_data[i * 3 + 1], normal_data[i * 3 + 2] },
       .tex = {tex_data[i * 2 ], tex_data[i * 2 +1 ] },
     };
     vertices[i] = v;
@@ -363,6 +391,8 @@ int gltf_load(GfxContext context, const char* filename,
   cgltf_data* data;
   cgltf_options options = {0};
 
+  // add static here for TEXTURES USED
+  
   /* Check we can use the gltf data
    * must be triangualated and contain only 1 mesh and 1 primitive
    */
