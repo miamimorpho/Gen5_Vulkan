@@ -1,15 +1,17 @@
 NAME = xsolid
 
-CFLAGS = -Wall -Wextra -Wpedantic -std=c99 -g -O0
+CFLAGS = -Wall -Wextra -Wpedantic -std=c99  -fmax-errors=5 -g -O0 \
+	-I/usr/include/vulkan \
+	-I/usr/include/cglm
 LDFLAGS = -lSDL2 -lvulkan -lrt -lm -ldl -lpthread -lcglm
 CC = gcc
+SOURCES = $(wildcard src/*.c)
 ifeq ($(OPTION), clang)
 	CC := clang
 endif
 
-$(NAME): main.c
-	$(CC) $(CFLAGS) -o $(NAME) main.c \
-	 pipeline.c memory.c drawing.c model.c camera.c stage1.c $(LDFLAGS)
+$(NAME): src/main.c
+	$(CC) $(CFLAGS) $(SOURCES) -o $(NAME) $(LDFLAGS)
 
 .PHONY: test clean
 

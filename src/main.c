@@ -1,17 +1,4 @@
-#include "solid.h"
-#include <SDL2/SDL.h>
-
-Entity
-entity_duplicate(Entity mother, float x, float y, float z){
-
-  Entity child;
-  glm_vec3_copy( (vec3){x, y, z}, child.pos);
-  child.indices_len = mother.indices_len;
-  child.first_index = mother.first_index;
-  child.vertex_offset = mother.vertex_offset;
-  child.texture_index = mother.texture_index;
-  return child;
-}
+#include "main.h"
 
 int
 main(void)
@@ -25,48 +12,52 @@ main(void)
   stage2_create(context, &pipeline);
 
   /* Stage 3: Descriptor Sets Creation */
-  descriptor_pool_create(context, &pipeline.descriptor_pool);
   slow_descriptors_alloc(context.l_dev, &pipeline);
   rapid_descriptors_alloc(context, &pipeline);
-  
-  Camera camera = camera_create(context);
 
-  /* Load gltf data to memory */
-  int model_count = 1;
-  GeometryData geo = geometry_buffer_create(context);
-  ImageData textures[model_count];
-  Entity car;
-  gltf_load(context, "models/Car2.glb",
-	    &geo, textures, &car);
-
-  
-  int entity_c = 100;
-  Entity entities[entity_c];
-  for(int x = 0; x < 10; x++){
-    for(int y = 0; y < 10; y++){
-      entities[(x * 10)+y] = entity_duplicate(car, x * 10, y * 10, 0);
-    }
-  }
-  
-  /*
-  int entity_c = 1;
-  Entity entities[entity_c];
-  entities[0] = entity_duplicate(car, 0, 0, 0);
-  */
-  
-  slow_descriptors_update(context, model_count, textures, &pipeline);
-  
-  DeviceBuffer draw_args[context.frame_c];
-  draw_args_create(context, pipeline, entity_c, draw_args);
-
-  DeviceBuffer indirect_b;
-  indirect_buffer_create(context, entity_c, &indirect_b);
-
-  /* Initial Mouse Data */
+  /* Camera Controls Init */
+  Camera camera = camera_create(WIDTH, HEIGHT);
   double front_vel = 0, strafe_vel = 0, speed = 0.2;
   float pitch_vel = 0, yaw_vel = 0, sensitivity = 0.005;
   SDL_SetRelativeMouseMode(SDL_TRUE);
   
+  /* Memory Allocation */
+  int model_count = 2;
+  GfxBuffer geo_data;
+  geometry_buffer_create(context, 30000, &geo_data);
+  ImageData textures[model_count];
+
+  /* Load gltf data to memory */
+  Entity car, car2;
+  entity_gltf_load(context, "models/CarBroken.glb",
+	    &geo_data, textures, &car);
+  entity_gltf_load(context, "models/Car2.glb",
+	    &geo_data, textures, &car2);
+  
+  /*
+  int entity_c = 100;
+  Entity entities[entity_c];
+  for(int x = 0; x < 10; x++){
+    for(int y = 0; y < 10; y++){
+      entities[(x * 10)+y] = entity_duplicate(car, x * 20, y * 20, 0);
+    }
+  }
+  */
+
+  int entity_c = 2;
+  Entity entities[entity_c];
+  entities[0] = entity_duplicate(car, 5, 5, 0);
+  entities[1] = entity_duplicate(car2, 10, 5, 0);
+
+  /* Start Rendering */
+  slow_descriptors_update(context, model_count, textures, &pipeline);
+  
+  GfxBuffer indirect_args[context.frame_c];
+  draw_args_create(context, pipeline, entity_c, indirect_args);
+
+  GfxBuffer indirect_draw;
+  draw_indirect_create(context, &indirect_draw, entity_c);
+
   /* Main rendering loop */
   int running = 1;
   SDL_Event event;
@@ -137,11 +128,13 @@ main(void)
     camera.pos[1] += camera.right[1] * strafe_vel;
 
     /* Reset command buffer, set initial values */
-    draw_start(&context, pipeline, geo);
+    draw_start(&context, pipeline);
     
-    /* Bind Slow Data
+    /* Bind Slow Data    
      * Textures, Vertices
      */
+    geometry_buffer_bind(pipeline.command_buffer, geo_data);
+    
     vkCmdBindDescriptorSets(pipeline.command_buffer,
 			    VK_PIPELINE_BIND_POINT_GRAPHICS,
 			    pipeline.layout, 0, 1,
@@ -151,15 +144,15 @@ main(void)
      * Transformation matrices, texture index
      */
     draw_args_update(camera, entities,
-		     draw_args[context.frame_index] );
+		     indirect_args[context.frame_index] );
     vkCmdBindDescriptorSets(pipeline.command_buffer,
 			    VK_PIPELINE_BIND_POINT_GRAPHICS,
 			    pipeline.layout, 1, 1,
 			    &pipeline.rapid_sets[context.frame_index],0, NULL);
 
     /* ultimate draw call */
-    indirect_buffer_update(indirect_b, entities);
-    vkCmdDrawIndexedIndirect(pipeline.command_buffer, indirect_b.handle, 0,
+    draw_indirect_update(indirect_draw, entities);
+    vkCmdDrawIndexedIndirect(pipeline.command_buffer, indirect_draw.handle, 0,
 			     entity_c, sizeof(VkDrawIndexedIndirectCommand));
     
     draw_end(context, pipeline);
@@ -171,9 +164,9 @@ main(void)
   /* Cleanup */
   VkFence fences[] = { pipeline.in_flight};
   vkWaitForFences(context.l_dev, 1, fences, VK_TRUE, UINT64_MAX);
-  models_destroy(context, model_count, &geo, textures);
-  buffers_destroy(context, 1, &indirect_b);
-  buffers_destroy(context, context.frame_c, draw_args);
+  models_destroy(context, model_count, geo_data, textures);
+  buffers_destroy(context, &indirect_draw, 1);
+  buffers_destroy(context, indirect_args, context.frame_c);
   stage2_destroy(context, pipeline);
   stage1_destroy(context);
     

@@ -1,4 +1,4 @@
-#include "solid.h"
+#include "core.h"
 
 const vec3 CAMERA_UP = {0.0f, 0.0f, -1.0f};
 
@@ -31,37 +31,8 @@ camera_rotate(Camera *cam, float x_vel, float y_vel){
   return 1;
 }
 
-int
-fps_mvp_calc(Camera cam, Entity entity, mat4 *dest)
-{
-  /* if you are doing m*vector then the order is (p*(v*(m*vector)))
-   * so the pre multiplied matrix is p * (v*m)
-   * btw `   glm_mat4_mul(vm, projection, push.mvp);`
-   * vm * p is not the same as `p * vm`
-   */
-
-  mat4 model;
-  glm_mat4_identity(model);
-  glm_translate(model, entity.pos);
-
-  mat4 view;
-  glm_look(cam.pos, cam.front, cam.up,
-	     view);
-
-  mat4 vm; // view*model
-  glm_mat4_mul(view, model, vm);
-  
-  mat4 projection;
-  glm_perspective(cam.fov, cam.aspect_ratio,
-		  cam.near, cam.far, projection);
-  projection[1][1] *= -1;
-
-  glm_mat4_mul(projection, vm, *dest);
-  return 0;
-}
-
 Camera
-camera_create(GfxContext context)
+camera_create(int width, int height)
 {
   Camera camera;
 
@@ -72,9 +43,9 @@ camera_create(GfxContext context)
   
   
   camera.fov = glm_rad(90.0f);
-  camera.aspect_ratio = context.extent.width / context.extent.height;
+  camera.aspect_ratio = width / height;
   
-  camera.near = 0.1f;
+  camera.near = 0.5f;
   camera.far = 500;
   
   return camera;

@@ -1,4 +1,4 @@
-#include "solid.h"
+#include "core.h"
 
 VkCommandBuffer
 command_single_begin(GfxContext context)
@@ -42,8 +42,8 @@ command_single_end(GfxContext context, VkCommandBuffer *command_buffer)
   return 0;
 }
 
-uint32_t
-draw_start(GfxContext *context, GfxPipeline gfx, GeometryData geo)
+int
+draw_start(GfxContext *context, GfxPipeline gfx)
 {
   VkFence fences[] = { gfx.in_flight };
   vkWaitForFences(context->l_dev, 1, fences, VK_TRUE, UINT64_MAX);
@@ -64,12 +64,10 @@ draw_start(GfxContext *context, GfxPipeline gfx, GeometryData geo)
     printf("!failed to begin recording command buffer!\n");
   }
 
-  // tricky formattting to not give warnings
   VkClearValue clears[2];
   clears[0].color = (VkClearColorValue){ { 0.0f, 0.0f, 0.0f, 1.0f } };
   clears[1].depthStencil = (VkClearDepthStencilValue){ 1.0f, 0 };
-
-  
+ 
   VkRenderPassBeginInfo render_pass_info = {
     .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
     .renderPass = gfx.render_pass,
@@ -102,13 +100,26 @@ draw_start(GfxContext *context, GfxPipeline gfx, GeometryData geo)
   vkCmdBindPipeline(gfx.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	            gfx.pipeline);
 
-  VkBuffer vertex_buffers[] = {geo.vertices.handle};
+  /*
+  VkBuffer vertex_buffers[] = {geo.vertices->handle};
   VkDeviceSize offsets[] = {0};
 
   vkCmdBindVertexBuffers(gfx.command_buffer, 0, 1, vertex_buffers, offsets);
-  vkCmdBindIndexBuffer(gfx.command_buffer, geo.indices.handle,
+  vkCmdBindIndexBuffer(gfx.command_buffer, geo.indices->handle,
 		       0, VK_INDEX_TYPE_UINT32);
+  */
+		       
+  return 0;
+}
 
+int
+draw_indirect_create(GfxContext context, GfxBuffer *buffer, int count)
+{
+  VkDeviceSize delta = count * sizeof(VkDrawIndexedIndirectCommand);
+  
+  buffer_create(context, delta,
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, buffer );
+  buffer->used_size += delta;
   return 0;
 }
 
@@ -165,84 +176,4 @@ draw_end(GfxContext context, GfxPipeline pipeline)
   
   return 0;
 }
-
-int
-indirect_buffer_create(GfxContext context, int count,
-		       DeviceBuffer *buffer)
-{
-  buffer_create(context,
-		count * sizeof(VkDrawIndexedIndirectCommand),
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, buffer
-		);
-		
-  return 0;
-}
-
-int
-indirect_buffer_update(DeviceBuffer buffer, Entity *entities)
-{
-  int count = buffer.size / sizeof(VkDrawIndexedIndirectCommand);
-  
-  for(int i = 0; i < count; i++){
-    VkDrawIndexedIndirectCommand* data_ptr =
-      ((VkDrawIndexedIndirectCommand*)buffer.first_index)+i;
-    data_ptr->indexCount = entities[i].indices_len;
-    data_ptr->instanceCount = 1;
-    data_ptr->firstIndex = entities[i].first_index;
-    data_ptr->vertexOffset = entities[i].vertex_offset;
-    data_ptr->firstInstance = i;
-  }
-  return 0;
-}
-
-void
-draw_args_update(Camera cam, Entity *entities,
-		 DeviceBuffer buffer)
-{
-  // every object in the entity list
-  int count = buffer.size / sizeof(drawArgs);
-  for(int i = 0; i < count; i++){
-    drawArgs *args_ptr = ((drawArgs*)buffer.first_index)+i;
-    args_ptr->texture_index = entities[i].texture_index;
-    fps_mvp_calc(cam, entities[i],
-		  &args_ptr->transform);
-  }
- 
-}
-
-void
-draw_args_create(GfxContext context, GfxPipeline pipeline,
-		  int count, DeviceBuffer *buffers)
-{
-  VkDescriptorBufferInfo buffer_info[context.frame_c];
-  VkWriteDescriptorSet descriptor_write[context.frame_c];
-  
-  for(uint32_t i = 0; i < context.frame_c; i++){
-    buffer_create(context,
-		  count * sizeof(drawArgs),
-		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-		  &buffers[i]
-		  );
-
-    buffer_info[i] = (VkDescriptorBufferInfo){
-      .buffer = buffers[i].handle,
-      .offset = 0,
-      .range = buffers[i].size,
-    };
-
-    descriptor_write[i] = (VkWriteDescriptorSet){
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = pipeline.rapid_sets[i],
-      .dstBinding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .pBufferInfo = &buffer_info[i],
-    };
-  }
-  vkUpdateDescriptorSets(context.l_dev, context.frame_c,
-			 descriptor_write, 0, NULL);
-}
-
-
-
 
