@@ -81,20 +81,6 @@ typedef struct {
   VkSampler sampler;
 } ImageData;
 
-typedef struct {
-  vec3 pos;
-
-  vec3 up;
-  vec3 front;
-  vec3 right;
-  
-  float fov;
-  float aspect_ratio;
-  
-  float near;
-  float far;
-} Camera;
-
 /** Maths */
 typedef struct{
   vec3 pos;
@@ -115,16 +101,11 @@ int buffer_create(GfxContext, VkDeviceSize, VkBufferUsageFlags, GfxBuffer* );
 int buffer_append(const void*, GfxBuffer*, size_t);
 void buffers_destroy(GfxContext, GfxBuffer*, int);
 
-/* Draw Commands draw.c */
-VkCommandBuffer command_single_begin(GfxContext);
-int command_single_end(GfxContext, VkCommandBuffer*);
-int draw_indirect_create(GfxContext, GfxBuffer*, int);
-int draw_start(GfxContext*, GfxPipeline);
-int draw_end(GfxContext, GfxPipeline);
-
-/* camera.c */
-int camera_rotate(Camera*, float, float);
-Camera camera_create(int, int);
+/* Descriptor Sets */
+int  slow_descriptors_update(GfxContext, uint32_t, ImageData*, GfxPipeline*);
+int  slow_descriptors_alloc(VkDevice, GfxPipeline* );
+int  rapid_descriptors_alloc(GfxContext, GfxPipeline* );
+void rapid_descriptors_update(GfxContext, GfxPipeline, GfxBuffer* );
 
 /* images.c */
 int  image_view_create(VkDevice, VkImage,
@@ -134,9 +115,5 @@ int  image_create(GfxContext, VkImage*, VkDeviceMemory*, VkFormat,
 void image_destroy(GfxContext, ImageData* );
 int  image_file_load(GfxContext, unsigned char*,
 		    size_t, size_t, size_t, ImageData* );
-int  slow_descriptors_update(GfxContext, uint32_t, ImageData*, GfxPipeline*);
-int  slow_descriptors_alloc(VkDevice, GfxPipeline* );
-int  rapid_descriptors_alloc(GfxContext, GfxPipeline* );
-void rapid_descriptors_update(GfxContext, GfxPipeline, GfxBuffer* );
 
 #endif /* RENDER_H */

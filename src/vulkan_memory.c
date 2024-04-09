@@ -1,4 +1,4 @@
-#include "core.h"
+#include "vulkan_public.h"
 #include "vulkan_util.h"
 #include <string.h>
 

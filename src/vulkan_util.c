@@ -151,3 +151,45 @@ sampler_create(GfxContext context, VkSampler *sampler)
   return 0;
   
 }
+
+VkCommandBuffer
+command_single_begin(GfxContext context)
+{
+  VkCommandBufferAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandPool = context.command_pool,
+    .commandBufferCount = 1,
+  };
+
+  VkCommandBuffer command_buffer;
+  vkAllocateCommandBuffers(context.l_dev, &alloc_info, &command_buffer);
+
+  VkCommandBufferBeginInfo begin_info = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+
+  vkBeginCommandBuffer(command_buffer, &begin_info);
+
+  return command_buffer;
+}
+
+int
+command_single_end(GfxContext context, VkCommandBuffer *command_buffer)
+{
+  vkEndCommandBuffer(*command_buffer);
+
+  VkSubmitInfo submit_info = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = command_buffer,
+  };
+
+  if(vkQueueSubmit(context.queue, 1, &submit_info, VK_NULL_HANDLE)
+     != VK_SUCCESS) return 1;
+  
+  vkQueueWaitIdle(context.queue);
+  vkFreeCommandBuffers(context.l_dev, context.command_pool, 1, command_buffer);
+  return 0;
+}

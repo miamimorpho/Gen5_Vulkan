@@ -1,4 +1,4 @@
-#include "core.h"
+#include "vulkan_public.h"
 #include "vulkan_util.h"
 
 #define STB_IMAGE_IMPLEMENTATION

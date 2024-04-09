@@ -1,6 +1,7 @@
-#include "core.h"
 #include <SDL2/SDL_vulkan.h>
 #include <SDL2/SDL.h>
+
+#include "vulkan_public.h"
 
 const int WIDTH = 640;
 const int HEIGHT = 480;

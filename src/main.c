@@ -32,23 +32,25 @@ main(void)
   entity_gltf_load(context, "models/CarBroken.glb",
 	    &geo_data, textures, &car);
   entity_gltf_load(context, "models/Car2.glb",
-	    &geo_data, textures, &car2);
-  
+		   &geo_data, textures, &car2);
+
   /*
   int entity_c = 100;
   Entity entities[entity_c];
   for(int x = 0; x < 10; x++){
     for(int y = 0; y < 10; y++){
-      entities[(x * 10)+y] = entity_duplicate(car, x * 20, y * 20, 0);
+      entities[(x * 10)+y] = entity_add1(car, x * 10, y * 10, 0);
     }
   }
   */
 
+  
   int entity_c = 2;
   Entity entities[entity_c];
-  entities[0] = entity_duplicate(car, 5, 5, 0);
-  entities[1] = entity_duplicate(car2, 10, 5, 0);
-
+  entities[0] = entity_add1(car, 5, 5, 0);
+  entities[1] = entity_add1(car2,10, 5, 0);
+  
+  
   /* Start Rendering */
   slow_descriptors_update(context, model_count, textures, &pipeline);
   
@@ -58,6 +60,8 @@ main(void)
   GfxBuffer indirect_draw;
   draw_indirect_create(context, &indirect_draw, entity_c);
 
+  float rotate_test = 0;
+  
   /* Main rendering loop */
   int running = 1;
   SDL_Event event;
@@ -115,7 +119,7 @@ main(void)
       break;
   
     }
-
+    
     /* Camera Movement */
     camera_rotate(&camera, yaw_vel, pitch_vel);
     pitch_vel = 0;
@@ -127,6 +131,13 @@ main(void)
     camera.pos[0] += camera.right[0] * strafe_vel;
     camera.pos[1] += camera.right[1] * strafe_vel;
 
+    printf("%f, %f, %f\n", camera.pos[0], camera.pos[1], camera.pos[2]);
+    
+    /* Model Movement */
+    rotate_test += 0.02f;
+    for(int i = 0; i < 1; i++){
+      glm_quat(entities[i].rotate, rotate_test, 0.0f, 0.0f, -1.0f);
+    }
     /* Reset command buffer, set initial values */
     draw_start(&context, pipeline);
     
