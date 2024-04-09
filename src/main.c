@@ -134,10 +134,11 @@ main(void)
     printf("%f, %f, %f\n", camera.pos[0], camera.pos[1], camera.pos[2]);
     
     /* Model Movement */
-    rotate_test += 0.02f;
-    for(int i = 0; i < 1; i++){
-      glm_quat(entities[i].rotate, rotate_test, 0.0f, 0.0f, -1.0f);
-    }
+    rotate_test += 0.01f;
+    
+    glm_quat(entities[0].rotate, rotate_test, 0.0f, 0.0f, -1.0f);
+    glm_quat(entities[1].rotate, rotate_test, 1.0f, 0.0f, 0.0f);
+     
     /* Reset command buffer, set initial values */
     draw_start(&context, pipeline);
     

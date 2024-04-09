@@ -243,8 +243,8 @@ entity_add1(Entity mother, float x, float y, float z){
 
   Entity child;
   glm_vec3_copy( (vec3){x, y, z}, child.pos);
-  glm_quat(child.rotate, 0.0f, 1.0f, 0.0f, 0.0f);
-
+  glm_quat(child.rotate, 0.0f, 0.0f, 0.0f, -1.0f);
+  
   child.indices_len = mother.indices_len;
   child.first_index = mother.first_index;
   child.vertex_offset = mother.vertex_offset;
