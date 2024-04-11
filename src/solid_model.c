@@ -194,6 +194,7 @@ gltf_mesh_load(cgltf_data *data, GfxBuffer *dest,
   indirect->indexCount = indices_accessor->count;
 
   index_buffer_append(indices, dest_indices, indices_accessor->count);
+
   
   return 0;
 }
@@ -225,9 +226,9 @@ int entity_gltf_load(GfxContext context, const char* filename,
   VkDrawIndexedIndirectCommand indirect;
   if(gltf_mesh_load(data, geometry, &indirect)) return 2;
 
-  components->indices_len = indirect.indexCount;
-  components->first_index = indirect.firstIndex;
-  components->vertex_offset = indirect.vertexOffset;
+  components->indexCount = indirect.indexCount;
+  components->firstIndex = indirect.firstIndex;
+  components->vertexOffset = indirect.vertexOffset;
   
   if(gltf_skin_load(context, data, &textures[TEXTURES_USED])) return 3;
   components->texture_index = TEXTURES_USED;
@@ -245,9 +246,9 @@ entity_add1(Entity mother, float x, float y, float z){
   glm_vec3_copy( (vec3){x, y, z}, child.pos);
   glm_quat(child.rotate, 0.0f, 0.0f, 0.0f, -1.0f);
   
-  child.indices_len = mother.indices_len;
-  child.first_index = mother.first_index;
-  child.vertex_offset = mother.vertex_offset;
+  child.indexCount = mother.indexCount;
+  child.firstIndex = mother.firstIndex;
+  child.vertexOffset = mother.vertexOffset;
   child.texture_index = mother.texture_index;
   return child;
 }

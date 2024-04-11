@@ -1,19 +1,19 @@
-# Gen5_Vulkan
-## Vulkan Real-time Rendering
+## SolidGfx
 
-Vulkan renderer written in C99
+renderer written in C99 + Vulkan
 
 **Progress**
  - FPS Camera Movement
  - Load in multiple models of multiple textures
  - Descriptor sets organised by update frequency
  - gltf/glb support
+ - basic lighting
 
-## Required Device Features
-**Core**
+**Device Features**
  - samplerAnisotropy
  - multiDrawIndirect
-**Descriptor Indexing**
+
+**Device Features 2
  - descriptorBindingPartiallyBound
  - runtimeDescriptorArray
 

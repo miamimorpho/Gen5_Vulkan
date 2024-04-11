@@ -24,16 +24,21 @@ main(void)
   /* Memory Allocation */
   int model_count = 2;
   GfxBuffer geo_data;
-  geometry_buffer_create(context, 30000, &geo_data);
+  geometry_buffer_create(context, 300000, &geo_data);
   ImageData textures[model_count];
 
   /* Load gltf data to memory */
-  Entity car, car2;
-  entity_gltf_load(context, "models/CarBroken.glb",
-	    &geo_data, textures, &car);
-  entity_gltf_load(context, "models/Car2.glb",
-		   &geo_data, textures, &car2);
+  Entity car, car2, world;
 
+  entity_gltf_load(context, "models/Car2.glb",
+	    &geo_data, textures, &car);
+  make_plane(128, 128, &geo_data, &world);
+  entity_gltf_load(context, "models/CarBroken.glb",
+		   &geo_data, textures, &car2);
+  
+  
+
+  
   /*
   int entity_c = 100;
   Entity entities[entity_c];
@@ -45,14 +50,14 @@ main(void)
   */
 
   
-  int entity_c = 2;
+  int entity_c = 3;
   Entity entities[entity_c];
-  entities[0] = entity_add1(car, 5, 5, 0);
-  entities[1] = entity_add1(car2,10, 5, 0);
-  
+  entities[0] = entity_add1(car,64, 64, 0);
+  entities[1] = entity_add1(car2, 64+16,64,0);
+  entities[2] = entity_add1(world, 0,0,0);
   
   /* Start Rendering */
-  slow_descriptors_update(context, model_count, textures, &pipeline);
+  slow_descriptors_update(context, entity_c -1, textures, &pipeline);
   
   GfxBuffer indirect_args[context.frame_c];
   draw_args_create(context, pipeline, entity_c, indirect_args);
@@ -128,16 +133,16 @@ main(void)
     /* Player Movement */
     camera.pos[0] += camera.front[0] * front_vel;
     camera.pos[1] += camera.front[1] * front_vel;
+    //camera.pos[2] += camera.up[2] * front_vel;
     camera.pos[0] += camera.right[0] * strafe_vel;
     camera.pos[1] += camera.right[1] * strafe_vel;
 
-    printf("%f, %f, %f\n", camera.pos[0], camera.pos[1], camera.pos[2]);
+    //printf("%f, %f, %f\n", camera.pos[0], camera.pos[1], camera.pos[2]);
     
     /* Model Movement */
     rotate_test += 0.01f;
     
-    glm_quat(entities[0].rotate, rotate_test, 0.0f, 0.0f, -1.0f);
-    glm_quat(entities[1].rotate, rotate_test, 1.0f, 0.0f, 0.0f);
+    //glm_quat(entities[0].rotate, rotate_test, 0.0f, 0.0f, -1.0);
      
     /* Reset command buffer, set initial values */
     draw_start(&context, pipeline);

@@ -1080,26 +1080,6 @@ stage2_destroy(GfxContext context, GfxPipeline pipeline)
   return 0;
 }
 
-int
-rapid_descriptors_alloc(GfxContext context, GfxPipeline *pipeline)
-{
-
-  VkDescriptorSetLayout layouts[context.frame_c];
-  for(uint32_t i = 0; i < context.frame_c; i++)
-    layouts[i] = pipeline->rapid_layout;
-  
-  VkDescriptorSetAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-    .descriptorPool = pipeline->descriptor_pool,
-    .descriptorSetCount = context.frame_c,
-    .pSetLayouts = layouts,
-  };
-  pipeline->rapid_sets = malloc(context.frame_c * sizeof( VkDescriptorSet ));
-  if(vkAllocateDescriptorSets(context.l_dev, &alloc_info, pipeline->rapid_sets)
-     != VK_SUCCESS) return 1;
-
-  return 0;
-}
 
 
 

@@ -76,7 +76,83 @@ buffer_create(GfxContext context, VkDeviceSize size, VkBufferUsageFlags usage, G
 }
 
 
+int
+slow_descriptors_alloc(VkDevice l_dev, GfxPipeline *pipeline)
+{
+  uint32_t max_binding = MAX_SAMPLERS -1;
+  VkDescriptorSetVariableDescriptorCountAllocateInfo count_info = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
+    .descriptorSetCount = 1,
+    .pDescriptorCounts = &max_binding,
+  };
+  
+  /* Allocate descriptor memory */
+  VkDescriptorSetAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+    .descriptorPool = pipeline->descriptor_pool,
+    .descriptorSetCount = 1,
+    .pSetLayouts = &pipeline->slow_layout,
+    .pNext = &count_info,
+  };
 
+  if(vkAllocateDescriptorSets(l_dev, &alloc_info, &pipeline->slow_set)
+     != VK_SUCCESS) return 1;
 
+  return 0;
+}
 
+int
+slow_descriptors_update(GfxContext context, uint32_t count,
+			ImageData *textures, GfxPipeline *pipeline)
+/* count is the quantity of unique texture files
+   the renderer is going to need to allocate GPU memory for
+   to use at one time
+ */
+{
+  VkDescriptorImageInfo infos[count];
+  VkWriteDescriptorSet writes[count];
+  
+  for(uint32_t i = 0; i < count; i++){
+  
+    infos[i] = (VkDescriptorImageInfo){
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .imageView = textures[i].view,
+      .sampler = textures[i].sampler,
+    };
+    
+    writes[i] = (VkWriteDescriptorSet){
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = pipeline->slow_set,
+      .dstBinding = 0,
+      .dstArrayElement = i,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorCount = 1,
+      .pImageInfo = &infos[i],
+    };
+  }
 
+  vkUpdateDescriptorSets(context.l_dev, count, writes, 0, NULL); 
+  
+  return 0;
+}
+
+int
+rapid_descriptors_alloc(GfxContext context, GfxPipeline *pipeline)
+{
+
+  VkDescriptorSetLayout layouts[context.frame_c];
+  for(uint32_t i = 0; i < context.frame_c; i++)
+    layouts[i] = pipeline->rapid_layout;
+  
+  VkDescriptorSetAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+    .descriptorPool = pipeline->descriptor_pool,
+    .descriptorSetCount = context.frame_c,
+    .pSetLayouts = layouts,
+  };
+  pipeline->rapid_sets = malloc(context.frame_c * sizeof( VkDescriptorSet ));
+  if(vkAllocateDescriptorSets(context.l_dev, &alloc_info, pipeline->rapid_sets)
+     != VK_SUCCESS) return 1;
+
+  return 0;
+}

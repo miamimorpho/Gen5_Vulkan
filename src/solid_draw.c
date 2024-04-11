@@ -197,10 +197,10 @@ draw_indirect_update(GfxBuffer buffer, Entity *entities)
     VkDrawIndexedIndirectCommand* data_ptr =
       ((VkDrawIndexedIndirectCommand*)buffer.first_ptr) +i;
     //VkDrawIndexedIndirectCommand *data_ptr = buffer_ptr(buffer, i * stride);
-    data_ptr->indexCount = entities[i].indices_len;
+    data_ptr->indexCount = entities[i].indexCount;
     data_ptr->instanceCount = 1;
-    data_ptr->firstIndex = entities[i].first_index;
-    data_ptr->vertexOffset = entities[i].vertex_offset;
+    data_ptr->firstIndex = entities[i].firstIndex;
+    data_ptr->vertexOffset = entities[i].vertexOffset;
     data_ptr->firstInstance = i;
   }
   return 0;
