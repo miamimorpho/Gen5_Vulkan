@@ -81,21 +81,16 @@ draw_start(GfxContext *context, GfxPipeline gfx)
 int
 model_matrix(Entity entity, mat4 *dest)
 {
-  /* This function calculates the model view projection matrix
-   * doing m*vector so the order is (p*(v*(m*vector)))
-   * so the pre multiplied matrix is p * (v*m)
-   * vm * p is not the same as `p * vm`
-   */
-
   mat4 model;
   glm_mat4_identity(model);
   glm_translate(model, entity.pos);
-
+  
   mat4 model_rotate;
   glm_quat_mat4(entity.rotate, model_rotate);
-  glm_mat4_mul(model, model_rotate, *dest); 
-
-  //glm_mat4_mul(cam.projection, vm, *dest);
+  glm_mat4_mul(model, model_rotate, model); 
+  
+  glm_scale(model, (vec3){1.0f,1.0f,1.0f});
+  glm_mat4_copy(model, *dest);
   
   return 0;
 }
@@ -113,25 +108,19 @@ draw_args_update(Camera cam, Entity *entities,
     // get pointer from stride
     drawArgs *args_ptr = ((drawArgs*)buffer.first_ptr) +i;
     args_ptr->texIndex = entities[i].texture_index;
-
-    //glm_mat4_copy(view, args_ptr->view);
-    //glm_mat4_copy(cam.projection, args_ptr->projection);
+ 
     mat4 model;
     model_matrix(entities[i], &model);
-    //glm_mat4_copy(model, args_ptr->model);
-    
+  
+    // MVP matrix
     mat4 vm;
     glm_mat4_mul(view, model, vm);
     glm_mat4_mul(cam.projection, vm, args_ptr->mvp);
     
-    
-    mat3 normal; // Normal
-    glm_mat4_pick3(model, normal); // Normal
-    glm_mat3_inv(normal, args_ptr->normalMatrix);
-    glm_mat3_transpose(args_ptr->normalMatrix);
-    
-    //glm_mat4_pick3(model, args_ptr->normalMatrix);
-    
+    // Lighting Matrix
+    glm_mat4_inv(model, args_ptr->rotate_m);
+    glm_mat4_transpose(args_ptr->rotate_m);
+
   }
  
 }

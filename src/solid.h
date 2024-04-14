@@ -28,7 +28,7 @@ typedef struct {
 } Entity;
 
 typedef struct{
-  mat3 normalMatrix;
+  mat4 rotate_m;
   mat4 mvp;
   uint32_t texIndex;
 } drawArgs;

@@ -7,7 +7,7 @@ renderer written in C99 + Vulkan
  - Load in multiple models of multiple textures
  - Descriptor sets organised by update frequency
  - gltf/glb support
- - basic lighting
+ - directional flat lighting
 
 **Device Features**
  - samplerAnisotropy

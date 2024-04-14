@@ -17,12 +17,12 @@ main(void)
 
   /* Camera Controls Init */
   Camera camera = camera_create(WIDTH, HEIGHT);
-  double front_vel = 0, strafe_vel = 0, speed = 0.2;
+  double front_vel = 0, strafe_vel = 0, speed = 0.5;
   float pitch_vel = 0, yaw_vel = 0, sensitivity = 0.005;
   SDL_SetRelativeMouseMode(SDL_TRUE);
   
   /* Memory Allocation */
-  int model_count = 2;
+  int model_count = 3;
   GfxBuffer geo_data;
   geometry_buffer_create(context, 300000, &geo_data);
   ImageData textures[model_count];
@@ -34,7 +34,7 @@ main(void)
 	    &geo_data, textures, &car);
   make_plane(128, 128, &geo_data, &world);
   entity_gltf_load(context, "models/CarBroken.glb",
-		   &geo_data, textures, &car2);
+  	   &geo_data, textures, &car2);
   
   
 
@@ -52,9 +52,9 @@ main(void)
   
   int entity_c = 3;
   Entity entities[entity_c];
-  entities[0] = entity_add1(car,64, 64, 0);
-  entities[1] = entity_add1(car2, 64+16,64,0);
-  entities[2] = entity_add1(world, 0,0,0);
+  entities[0] = entity_add1(car,0, 0, 0);
+  entities[1] = entity_add1(car2, 16,0,0);
+  entities[2] = entity_add1(world, 0,0,5);
   
   /* Start Rendering */
   slow_descriptors_update(context, entity_c -1, textures, &pipeline);
@@ -133,16 +133,13 @@ main(void)
     /* Player Movement */
     camera.pos[0] += camera.front[0] * front_vel;
     camera.pos[1] += camera.front[1] * front_vel;
-    //camera.pos[2] += camera.up[2] * front_vel;
     camera.pos[0] += camera.right[0] * strafe_vel;
     camera.pos[1] += camera.right[1] * strafe_vel;
 
-    //printf("%f, %f, %f\n", camera.pos[0], camera.pos[1], camera.pos[2]);
-    
     /* Model Movement */
-    rotate_test += 0.01f;
+    rotate_test = (rotate_test + 0.01f);
     
-    //glm_quat(entities[0].rotate, rotate_test, 0.0f, 0.0f, -1.0);
+    glm_quat(entities[1].rotate, rotate_test, 0.0f, 0.0f, -1.0);
      
     /* Reset command buffer, set initial values */
     draw_start(&context, pipeline);

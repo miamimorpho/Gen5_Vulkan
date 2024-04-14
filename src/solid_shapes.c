@@ -19,6 +19,10 @@ int normals_calc(){
   return 1;
 }
 
+void print_vec3(vec3 v){
+  printf("%f, %f, %f\n", v[0], v[1], v[2]);
+}
+
 int make_plane(int width, int height, GfxBuffer* dest, Entity* indirect){
 
   /* units passed are quads
@@ -49,16 +53,13 @@ int make_plane(int width, int height, GfxBuffer* dest, Entity* indirect){
   for(int y = 0; y <= height; y++){
     for(int x = 0; x <= width; x++){
       vertex v = {
-	.pos = {(float)x, (float)y, fnlGetNoise2D(&noise, x, y) * 5},
-	.normal = {0.0f, -1.0f, 0.0f},
+	.pos = {(float)x, (float)y, fnlGetNoise2D(&noise, x, y) * 2},
+	.normal = {0.0f, 0.0f, 0.0f},
 	.tex ={0.0f,0.0f},
 	};
     vertices[y * (width +1) + x] = v;
     }
   }
- 
-  indirect->vertexOffset = dest->used_size / sizeof(vertex);
-  vertex_buffer_append(vertices, dest, vertex_c );
 
   // generate indices
   for(int i = 0; i < index_c; i += 6){
@@ -83,8 +84,36 @@ int make_plane(int width, int height, GfxBuffer* dest, Entity* indirect){
   GfxBuffer *dest_indices = (GfxBuffer*)dest->p_next;
   indirect->firstIndex = dest_indices->used_size / sizeof(uint32_t);
   indirect->indexCount = index_c;
+  indirect->vertexOffset = dest->used_size / sizeof(vertex);
   index_buffer_append(indices, dest_indices, index_c );
 
+  // calculate normals
+  for(int i = 0; i < index_c; i += 3){
+    vec3 v1, v2, v3;
+    glm_vec3_copy(vertices[indices[i]].pos, v1);
+    glm_vec3_copy(vertices[indices[i+1]].pos, v2);
+    glm_vec3_copy(vertices[indices[i+2]].pos, v3);
+  
+    vec3 edge1, edge2;
+    glm_vec3_sub(v2, v1, edge1);
+    glm_vec3_sub(v3, v1, edge2);
+    
+    vec3 fragNormal;
+    glm_vec3_cross(edge1, edge2, fragNormal);
+    //printf("normal =");
+    //print_vec3(fragNormal);
+    
+    glm_vec3_add(vertices[indices[i]].normal,   fragNormal, vertices[indices[i]].normal);
+    glm_vec3_add(vertices[indices[i+1]].normal, fragNormal, vertices[indices[i+1]].normal);
+    glm_vec3_add(vertices[indices[i+2]].normal, fragNormal, vertices[indices[i+2]].normal);
+  }
+  
+  for(int v = 0; v < vertex_c; v++){
+    glm_vec3_normalize(vertices[v].normal);
+  }
+
+  vertex_buffer_append(vertices, dest, vertex_c );
+  
   indirect->texture_index = 0;
   
   return 0;
