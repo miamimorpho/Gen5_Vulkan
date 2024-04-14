@@ -3,17 +3,19 @@
 renderer written in C99 + Vulkan
 
 **Progress**
- - FPS Camera Movement
- - Load in multiple models of multiple textures
- - Descriptor sets organised by update frequency
- - gltf/glb support
- - directional flat lighting
+ - [X] Load in multiple models of multiple textures
+ - [X] Descriptor sets organised by update frequency
+ - [X] FPS Camera Movement
+ - [X] directional flat lighting
+ - [X] basic simplex noise terrain generation
+ - [ ] collision detection
+ - [ ] directional sprites
 
 **Device Features**
  - samplerAnisotropy
  - multiDrawIndirect
 
-**Device Features 2
+**Device Features 2**
  - descriptorBindingPartiallyBound
  - runtimeDescriptorArray
 
