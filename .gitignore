@@ -1,4 +1,5 @@
 models/
+textures/
 shaders/*.spv
 xsolid
 *~

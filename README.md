@@ -1,17 +1,20 @@
-## SolidGfx
+## Vulkan Playground
 
 renderer written in C99 + Vulkan
 
-**Progress**
+**Roadmap**
  - [X] Load in multiple models of multiple textures
  - [X] Descriptor sets organised by update frequency
  - [X] FPS Camera Movement
  - [X] directional flat lighting
  - [X] basic simplex noise terrain generation
- - [ ] collision detection
+ - [ ] text rendering
  - [ ] directional sprites
+ - [ ] scripting language integration
+ - [ ] garbage collection/ memory allocator
+ - [ ] collision detection
 
-**Device Features**
+**Required Device Features**
  - samplerAnisotropy
  - multiDrawIndirect
 

@@ -1,7 +1,7 @@
-#include <SDL2/SDL_vulkan.h>
-#include <SDL2/SDL.h>
-
 #include "vulkan_public.h"
+
+#include <string.h>
+
 
 const int WIDTH = 640;
 const int HEIGHT = 480;
@@ -49,7 +49,6 @@ queue_index(VkPhysicalDevice p_dev, VkQueueFlagBits required_flags)
 int
 surface_create(GfxContext *stage1)
 {
-  /* Create surface */
   if(SDL_Vulkan_CreateSurface(SDL_WINDOW, VULKAN_INSTANCE,
 			      &VULKAN_SURFACE)
      != SDL_TRUE){
@@ -58,7 +57,7 @@ surface_create(GfxContext *stage1)
     SDL_Quit();
     return 1;
   }
-
+  
   /* Test for queue presentation support */
   VkBool32 present_support = VK_FALSE;
   vkGetPhysicalDeviceSurfaceSupportKHR
@@ -223,20 +222,21 @@ device_ext_count(VkPhysicalDevice l_dev)
 
   uint32_t ext_c = sizeof(cfg_device_extensions) / sizeof(cfg_device_extensions[0]);
   int layer_found;
-  printf("device_extensions...\n");
+  printf("device_extensions [ ");
   for(uint32_t i = 0; i < ext_c; i++){
     layer_found = 0;
     for(uint32_t a = 0; a < avail_ext_c; a++){
       if(strcmp(cfg_device_extensions[i], avail_ext[a].extensionName) == 0){
-	printf("\t%s\n", avail_ext[a].extensionName);
+	printf("%s, ", avail_ext[a].extensionName);
 	layer_found = 1;
       }
     }
     if(!layer_found){
-      printf("\t!%s not found!\n", cfg_device_extensions[i]);
+      printf("[MISSING %s]", cfg_device_extensions[i]);
       return 0;
     }
   }
+  printf("]\n");
   
   return ext_c;
 }
@@ -255,26 +255,23 @@ devices_create(GfxContext *stage1)
   VkPhysicalDeviceProperties dev_properties;
   vkGetPhysicalDeviceProperties(p_dev, &dev_properties);
   
-  printf("physical device...\n\t%s\n", dev_properties.deviceName);      
-  printf("device features\n");
+  printf("GPU [ %s ]\n", dev_properties.deviceName);      
+  printf("device features [ ");
 
   VkPhysicalDeviceFeatures dev_features;
   vkGetPhysicalDeviceFeatures(p_dev, &dev_features);  
   if(dev_features.geometryShader){
     // should be enabled by default
-    printf("\t[X] geometry sampler\n");
+    printf("geometry sampler, ");
   }else{
-    printf("no suitable devices found!\n");
+    printf("[error] no geometry shader");
     return 1;
   }
   if(dev_features.samplerAnisotropy){
-    /* enabled_dev_features.samplerAnisotropy = VK_TRUE;
-       should be enabled by default */
-    printf("\t[X] sampler anisotropy\n");
+     printf("sampler anisotropy, ");
   }
   if(dev_features.multiDrawIndirect){
-    //enabled_dev_features.multiDrawIndirect = VK_TRUE;
-    printf("\t[X] multidrawing\n");
+    printf("multidrawing, ");
   }
 
   /* Enable Descriptor Indexing */
@@ -286,13 +283,14 @@ devices_create(GfxContext *stage1)
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
     .pNext = &descriptor_indexing_features,
   };
-  
-  printf("device features 2\n");
   vkGetPhysicalDeviceFeatures2(p_dev, &dev_features2 );
-  if(descriptor_indexing_features.descriptorBindingPartiallyBound
-     && descriptor_indexing_features.runtimeDescriptorArray)
-    printf("\t[X] descriptor indexing\n");
+ 
+  if(descriptor_indexing_features.descriptorBindingPartiallyBound)
+    printf("descriptor Binding Partially Bound, ");
+  if(descriptor_indexing_features.runtimeDescriptorArray)
+    printf("runtime descriptor array, ");
 
+  printf("]\n");
   /* Graphics Queue Init*/
   stage1->p_dev = p_dev;
   int graphics_queue_index = queue_index(stage1->p_dev, VK_QUEUE_GRAPHICS_BIT);
@@ -342,20 +340,21 @@ debug_layer_count(void)
   int valid_layer_c = sizeof(cfg_validation_layers) / sizeof(cfg_validation_layers[0]);
   int layer_found;
 
-  printf("validation_layers... \n");
+  printf("validation_layers [ ");
   for (int i = 0; i < valid_layer_c; i++){
     layer_found = 0;
     for(uint32_t a = 0; a < avail_layer_c; a++){
       if(strcmp(cfg_validation_layers[i], avail_layers[a].layerName) == 0){
-	printf("[X]\t%s\n", avail_layers[a].layerName);
+	printf("%s, ", avail_layers[a].layerName);
 	layer_found = 1;
       }
     }
     if(!layer_found){
-      printf("\t!%s not found!\n", cfg_validation_layers[i]);
+      printf("%s[error]", cfg_validation_layers[i]);
       return 0;
     }
   }
+  printf("]\n");
   return valid_layer_c;
 }
 
@@ -386,26 +385,26 @@ instance_create()
 
   uint32_t SDL_ext_c;
   SDL_Vulkan_GetInstanceExtensions(SDL_WINDOW, &SDL_ext_c, NULL);
-  const char *SDL_extensions[SDL_ext_c];
-  SDL_Vulkan_GetInstanceExtensions(SDL_WINDOW, &SDL_ext_c, SDL_extensions);
+  const char *SDL_ext[SDL_ext_c];
+  SDL_Vulkan_GetInstanceExtensions(SDL_WINDOW, &SDL_ext_c, SDL_ext);
 
-  uint32_t ext_c = 0;
-  vkEnumerateInstanceExtensionProperties(NULL, &ext_c, NULL);
-  VkExtensionProperties ext[ext_c+1];
-  vkEnumerateInstanceExtensionProperties(NULL, &ext_c, ext);
+  uint32_t vk_ext_c = 0;
+  vkEnumerateInstanceExtensionProperties(NULL, &vk_ext_c, NULL);
+  VkExtensionProperties vk_ext[vk_ext_c+1];
+  vkEnumerateInstanceExtensionProperties(NULL, &vk_ext_c, vk_ext);
 
   int ext_found;
   printf("instance extensions...\n");
   for (uint32_t g = 0; g < SDL_ext_c; g++){
     ext_found = 0;
-    for (uint32_t i = 0; i < ext_c; i++){
-      if (strcmp(SDL_extensions[g], ext[i].extensionName) == 0){
+    for (uint32_t i = 0; i < vk_ext_c; i++){
+      if (strcmp(SDL_ext[g], vk_ext[i].extensionName) == 0){
 	ext_found = 1;
-	printf("[X]\t%s\n", ext[i].extensionName);
+	printf("[X]\t%s\n", vk_ext[i].extensionName);
       }
     }
     if(!ext_found){
-      printf("!extension not found! %s\n", SDL_extensions[g]);
+      printf("!extension not found! %s\n", SDL_ext[g]);
       return 1;
     }
   }
@@ -414,7 +413,7 @@ instance_create()
     .sType= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     .pApplicationInfo = &app_info,
     .enabledExtensionCount = SDL_ext_c,
-    .ppEnabledExtensionNames = SDL_extensions,
+    .ppEnabledExtensionNames = SDL_ext,
     .enabledLayerCount = 0,
   };
 
@@ -433,8 +432,7 @@ instance_create()
   return 0;
 }
 
-int
-stage1_create(GfxContext *stage1)
+int context_create(GfxContext *stage1)
 {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_WINDOW = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED,
@@ -456,8 +454,8 @@ stage1_create(GfxContext *stage1)
   return 0;
 }
 
-int
-stage1_destroy(GfxContext stage1){
+int context_destroy(GfxContext stage1)
+{
   for(uint32_t i = 0; i < stage1.frame_c; i++)
     vkDestroyImageView(stage1.l_dev, stage1.views[i], NULL);
 
@@ -469,10 +467,10 @@ stage1_destroy(GfxContext stage1){
   vkDestroyDevice(stage1.l_dev, NULL);
   vkDestroySurfaceKHR(VULKAN_INSTANCE, VULKAN_SURFACE, NULL);
   vkDestroyInstance(VULKAN_INSTANCE, NULL);
- 
+
   SDL_DestroyWindow(SDL_WINDOW);
   SDL_Quit();
-
+ 
   return 0;
 }
 
@@ -516,62 +514,6 @@ depth_format_check(VkPhysicalDevice p_dev, VkFormat *format)
     return 1;
   }
 }
-
-int
-descriptor_set_layouts_create(VkDevice l_dev, GfxPipeline *pipeline)
-{
-  /* Texture */
-   VkDescriptorSetLayoutBinding sampler_binding = {
-    .binding = 0,
-    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-    .descriptorCount = MAX_SAMPLERS,
-    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-  };
-
-  VkDescriptorBindingFlags bindless_flags =
-    VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT
-    | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
-    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
- 
-  VkDescriptorSetLayoutBindingFlagsCreateInfo sampler_info2 = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-    .bindingCount = 1,
-    .pBindingFlags = &bindless_flags,
-  };
-  
-  VkDescriptorSetLayoutCreateInfo sampler_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-    .bindingCount = 1,
-    .pBindings = &sampler_binding,
-    .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-    .pNext = &sampler_info2,
-  };
-  
-  if(vkCreateDescriptorSetLayout(l_dev, &sampler_info, NULL,
-				 &pipeline->slow_layout) != VK_SUCCESS) return 1;
-
-  /* Indirect draw call buffer */
-  VkDescriptorSetLayoutBinding transform_binding = {
-    .binding = 0,
-    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-    .descriptorCount = 1,
-    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-  };
-
-  VkDescriptorSetLayoutCreateInfo transform_layout_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-    .bindingCount = 1,
-    .pBindings = &transform_binding
-  };
-
-  if(vkCreateDescriptorSetLayout(l_dev, &transform_layout_info, NULL,
-				 &pipeline->rapid_layout) != VK_SUCCESS) return 1;
-
-
-  return 0;
-}
-
-
 
 VkShaderModule
 shader_module_create(VkDevice l_dev, long size, const char* code)
@@ -720,7 +662,7 @@ render_pass_create(GfxContext context, VkRenderPass *render_pass)
 }
 
 int
-pipeline_create(GfxContext context, GfxPipeline *gfx)
+uber_pipeline_create(GfxContext context, GfxPipeline *gfx)
 {
   long vert_spv_size;
   char* vert_spv = shader_file_read("shaders/vert.spv", &vert_spv_size);
@@ -882,25 +824,7 @@ pipeline_create(GfxContext context, GfxPipeline *gfx)
     .blendConstants[2] = 0.0f,
     .blendConstants[3] = 0.0f,
   };
-  VkDescriptorSetLayout descriptor_set_layouts[2] = {
-    gfx->slow_layout, gfx->rapid_layout
-  };
-  
-  VkPipelineLayoutCreateInfo pipeline_layout_info = {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    .setLayoutCount = 2,
-    .pSetLayouts = descriptor_set_layouts,
-
-  };
-
-  if(vkCreatePipelineLayout(context.l_dev, &pipeline_layout_info,
-			    NULL, &gfx->layout)
-       != VK_SUCCESS)
-    {
-      printf("!failed to create pipeline layout!\n");
-      return 1;
-    }
-
+ 
   VkGraphicsPipelineCreateInfo pipeline_info = {
     .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
     .stageCount = 2,
@@ -964,7 +888,8 @@ framebuffers_create(GfxContext context, GfxPipeline *pipeline)
 }
 
 int
-command_buffer_create(GfxContext context, VkCommandBuffer *command_buffer){
+command_buffer_create(GfxContext context, VkCommandBuffer *command_buffer)
+{
   VkCommandBufferAllocateInfo allocate_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
     .commandPool = context.command_pool,
@@ -982,35 +907,7 @@ command_buffer_create(GfxContext context, VkCommandBuffer *command_buffer){
 }
 
 int
-descriptor_pool_create(GfxContext context, VkDescriptorPool* descriptor_pool)
-{
-
-  VkDescriptorPoolSize pool_sizes[2];
-  pool_sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  pool_sizes[0].descriptorCount = MAX_SAMPLERS;
-  
-  pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  pool_sizes[1].descriptorCount = context.frame_c;
- 
-
-  VkDescriptorPoolCreateInfo pool_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-    .poolSizeCount = 2,
-    .pPoolSizes = pool_sizes,
-    .maxSets = MAX_SAMPLERS + context.frame_c,
-    .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
-  };
-
-  if(vkCreateDescriptorPool(context.l_dev, &pool_info, NULL, descriptor_pool)
-     != VK_SUCCESS) {
-    printf("failed to create descriptor pool\n");
-    return 1;
-  }
-  return 0;
-}
-
-int
-stage2_create(GfxContext context, GfxPipeline *pipeline)
+pipeline_create(GfxContext context, GfxResources resources, GfxPipeline *pipeline)
 {
   depth_create(context, pipeline);
   render_pass_create(context, &pipeline->render_pass);
@@ -1040,16 +937,34 @@ stage2_create(GfxContext context, GfxPipeline *pipeline)
     return 1;
   }
 
-  descriptor_set_layouts_create(context.l_dev, pipeline);
-  pipeline_create(context, pipeline);
-
-  descriptor_pool_create(context, &pipeline->descriptor_pool);
+  VkDescriptorSetLayout descriptor_set_layouts[2] = {
+    resources.slow_layout, resources.rapid_layout
+  };
   
+  VkPipelineLayoutCreateInfo pipeline_layout_info = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .setLayoutCount = 2,
+    .pSetLayouts = descriptor_set_layouts,
+
+  };
+
+  if(vkCreatePipelineLayout(context.l_dev, &pipeline_layout_info,
+			    NULL, &pipeline->layout)
+       != VK_SUCCESS)
+    {
+      printf("!failed to create pipeline layout!\n");
+      return 1;
+    }
+
+
+
+  uber_pipeline_create(context, pipeline);
+ 
   return 0;
 }
 
 int
-stage2_destroy(GfxContext context, GfxPipeline pipeline)
+pipeline_destroy(GfxContext context, GfxPipeline pipeline)
 {
   vkResetCommandBuffer(pipeline.command_buffer, 0);
   vkDestroyCommandPool(context.l_dev, context.command_pool, NULL);
@@ -1072,11 +987,7 @@ stage2_destroy(GfxContext context, GfxPipeline pipeline)
   vkDestroyPipeline(context.l_dev, pipeline.pipeline, NULL);
   vkDestroyPipelineLayout(context.l_dev, pipeline.layout, NULL);
   
-  vkDestroyDescriptorPool(context.l_dev, pipeline.descriptor_pool, NULL);
-  vkDestroyDescriptorSetLayout(context.l_dev, pipeline.rapid_layout, NULL);
-  free(pipeline.rapid_sets);
-  vkDestroyDescriptorSetLayout(context.l_dev, pipeline.slow_layout, NULL);
-  
+ 
   return 0;
 }
 

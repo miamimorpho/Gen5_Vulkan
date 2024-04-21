@@ -1,65 +1,11 @@
-#include "vulkan_public.h"
-#include "solid.h"
+#include "loading.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../extern/stb_image.h"
 
 #define CGLTF_IMPLEMENTATION
 #include "../extern/cgltf.h"
 
-static uint32_t TEXTURES_USED = 0;
-
-int
-models_destroy(GfxContext context, uint32_t count,
-	       GfxBuffer geometry, ImageData *textures)
-{
-  /* once we have done textures and world mesh, we should come
-   * up with a generic way to create/destroy models with no
-   * memory leaks */
-  buffers_destroy(context, (GfxBuffer*)geometry.p_next, 1);
-  buffers_destroy(context, &geometry, 1);
-  
-  for(uint32_t i = 0; i < count; i++){
-    image_destroy(context, &textures[i]);
-  }
-  
-  return 1;
-}
-
-int
-geometry_buffer_bind(VkCommandBuffer commands, GfxBuffer geometry){
-  VkBuffer vertex_buffers[] = {geometry.handle};
-  VkDeviceSize offsets[] = {0};
-
-  GfxBuffer *indices = (GfxBuffer*)geometry.p_next;
-  vkCmdBindVertexBuffers(commands, 0, 1, vertex_buffers, offsets);
-  vkCmdBindIndexBuffer(commands, indices->handle,
-		       0, VK_INDEX_TYPE_UINT32);
-
-  return 0;
-}
-
-int
-geometry_buffer_create(GfxContext context, int count, GfxBuffer *geometry)
-{
-  GfxBuffer *vertices = (GfxBuffer*)malloc(sizeof(GfxBuffer));
-  GfxBuffer *indices = (GfxBuffer*)malloc(sizeof(GfxBuffer));
-
-  
-  //GfxBuffer *vertices;
-  buffer_create(context,
-		count * sizeof(vertex),
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		vertices);
-
-  //GfxBuffer *indices;
-  buffer_create(context,
-		count * sizeof(uint32_t),
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		indices);
-
-  *geometry = *vertices;
-  geometry->p_next = (void*)indices;
-  
-  return 0;
-}
 
 int
 vertex_buffer_append(const vertex *vertices, GfxBuffer *dest, uint32_t count ){
@@ -71,31 +17,134 @@ index_buffer_append(const uint32_t *indices, GfxBuffer *dest, uint32_t count){
   return buffer_append(indices, dest, count * sizeof(uint32_t) );
 }
 
+
+int texture_load(GfxContext context, unsigned char* pixels, ImageData* texture,
+		 int width, int height, int channels){
+
+  VkFormat format;
+  switch(channels){
+  case 4:
+    format = VK_FORMAT_R8G8B8A8_SRGB;
+    break;
+  case 3:
+    format = VK_FORMAT_R8G8B8_SRGB;
+    break;
+  default:
+    return 2;
+  }
+  
+  VkDeviceSize image_size = width * height * channels;
+  GfxBuffer image_b;
+  buffer_create(context, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		&image_b);
+
+  /* copy pixel data to buffer */
+  memcpy(image_b.first_ptr, pixels, image_size);
+ 
+  image_create(context, &texture->handle, &texture->memory,
+	       format,
+	       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+	       width, height);
+
+  /* Copy the image buffer to a VkImage proper */
+  transition_image_layout(context, texture->handle,
+			  VK_IMAGE_LAYOUT_UNDEFINED,
+			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  copy_buffer_to_image(context, image_b.handle, texture->handle,
+		       (uint32_t)width, (uint32_t)height);
+
+  transition_image_layout(context, texture->handle,
+			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  buffers_destroy(context, &image_b, 1);
+
+ 
+  
+  /* Create image view */
+  image_view_create(context.l_dev, texture->handle,
+		    &texture->view, format,
+		    VK_IMAGE_ASPECT_COLOR_BIT);
+  sampler_create(context, &texture->sampler);
+
+  return 0;
+}
+
+
+int textures_slot(GfxResources resources){
+  for(uint32_t i = 0; i < MAX_SAMPLERS; i ++){
+    if(resources.textures[i].handle == VK_NULL_HANDLE){
+      printf("texture slot: [%d]\n", i);
+      return i;
+    }
+  }
+  return MAX_SAMPLERS;
+}
+
+int png_load(GfxContext context, const char* filename, GfxResources *resources){
+
+  int ti = textures_slot(*resources);
+  
+  ImageData* dest = &resources->textures[ti];
+  
+  int x, y, n;
+  stbi_info(filename, &x, &y, &n);
+  printf("channels: %d\n", n);
+  unsigned char *pixels = stbi_load(filename, &x, &y, &n, n);
+  texture_load(context, pixels, dest, x, y, n);
+
+  return ti;
+}
+
 /* error 1 file format */
-int
-gltf_skin_load(GfxContext context, cgltf_data* file, ImageData *texture)
-{
+int gltf_skin_load(GfxContext context, cgltf_data* file, ImageData* texture){
  /* Load image skin textures */
   cgltf_buffer_view* view = NULL;
+  printf("loading textures [ ");
   for(cgltf_size i = 0 ; i < file->images_count; i++){
-    printf("texture MIME type: %s\n", file->images[i].mime_type);
+    printf("%s, ", file->images[i].mime_type);
     if(strcmp(file->images[i].mime_type, "image/png") == 0){
       view = file->images[i].buffer_view;
       break;
     }
   }
   if(view == NULL){
-    printf("no view found!\n");
+    printf("MISSING PNG");
     return 1;
   }
+  printf(" ]\n");
   
   /* create view accessor */
+  int size = view->size;
   int offset = view->offset;
   int stride = view->stride ? view->stride : 1;
   unsigned char *data = ((unsigned char *)view->buffer->data);
-  
-  image_file_load(context, data, offset, view->size, stride, texture);
 
+  /* load raw data */
+  uint8_t* raw_pixels = malloc(size);
+  for(int i = 0; i < size; i++){
+    raw_pixels[i] = data[offset];
+    offset += stride;
+  }
+
+  /* Choose image format */
+  int width, height, channels;
+  stbi_info_from_memory(raw_pixels, size,
+			&width, &height, &channels);
+  /* interpret view file */
+  uint8_t* pixels = stbi_load_from_memory
+    ((uint8_t*)raw_pixels, size,
+     &width, &height, &channels, channels);
+  if(pixels == NULL) {
+    printf("failed to interpret raw pixel data\n");
+    return 2;
+  }
+
+  texture_load(context, pixels, texture, width, height, channels);
+  
+  free(raw_pixels);
+  
   return 0;
 }
 
@@ -118,30 +167,32 @@ gltf_mesh_load(cgltf_data *data, GfxBuffer *dest,
   int pos_index = 0;
   int tex_index = 0;
   int normal_index = 0;
+  printf("loading model [ ");
   for(size_t attrib_i = 0; attrib_i < primitive->attributes_count; attrib_i++){
     cgltf_attribute_type attribute = primitive->attributes[attrib_i].type;
 
     if(attribute == cgltf_attribute_type_position){
       pos_index = attrib_i;
-      printf("found vertices\n");
+      printf("vertices, ");
     }
       
     if(attribute == cgltf_attribute_type_normal){
       normal_index = attrib_i;
-      printf("found normals\n");
+      printf("normals, ");
     }
 
     if(attribute == cgltf_attribute_type_color){
-      printf("found colours\n");
+      printf("colours, ");
     }
     
     if(attribute == cgltf_attribute_type_texcoord){
       tex_index = attrib_i;
-      printf("found texture coords\n");
+      printf("texture coords, ");
     }
  
   }
-
+  printf(" ]\n");
+  
   /* load attributes into vertex buffer
    * starting with position data */
   cgltf_accessor* pos_accessor = data->meshes[mesh_index]
@@ -204,51 +255,32 @@ gltf_mesh_load(cgltf_data *data, GfxBuffer *dest,
  * through the functions 'gltf_mesh_load' and 'gltf_skin_load'
  */
 int entity_gltf_load(GfxContext context, const char* filename,
-	      GfxBuffer *geometry, ImageData *textures,
-	      Entity* components)
-{
+		     GfxModelOffsets *model, GfxResources *resources){ 
   cgltf_data* data;
   cgltf_options options = {0};
 
-  // add static here for TEXTURES USED
-  
-  /* Check we can use the gltf data
-   * must be triangualated and contain only 1 mesh and 1 primitive
-   */
-
   if(cgltf_parse_file(&options, filename, &data)
-     != cgltf_result_success) return 1;
+     != cgltf_result_success){
+    printf("file missing!\n");
+    return 1;
+  }
   if(cgltf_load_buffers(&options, data, filename)
      != cgltf_result_success) return 1;
   if(cgltf_validate(data)
      != cgltf_result_success) return 1;
   
   VkDrawIndexedIndirectCommand indirect;
-  if(gltf_mesh_load(data, geometry, &indirect)) return 2;
+  if(gltf_mesh_load(data, &resources->geometry, &indirect)) return 2;
 
-  components->indexCount = indirect.indexCount;
-  components->firstIndex = indirect.firstIndex;
-  components->vertexOffset = indirect.vertexOffset;
-  
-  if(gltf_skin_load(context, data, &textures[TEXTURES_USED])) return 3;
-  components->texture_index = TEXTURES_USED;
-  TEXTURES_USED += 1;
+  model->indexCount = indirect.indexCount;
+  model->firstIndex = indirect.firstIndex;
+  model->vertexOffset = indirect.vertexOffset;
+
+  int ti = textures_slot(*resources);
+  gltf_skin_load(context, data, &resources->textures[ti]);
+  model->textureIndex = ti;
 
   cgltf_free(data);
   
   return 0;
-}
-
-Entity
-entity_add1(Entity mother, float x, float y, float z){
-
-  Entity child;
-  glm_vec3_copy( (vec3){x, y, z}, child.pos);
-  glm_quat(child.rotate, 0.0f, 0.0f, 0.0f, -1.0f);
-  
-  child.indexCount = mother.indexCount;
-  child.firstIndex = mother.firstIndex;
-  child.vertexOffset = mother.vertexOffset;
-  child.texture_index = mother.texture_index;
-  return child;
 }

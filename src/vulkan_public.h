@@ -5,6 +5,8 @@
 #define RENDER_H
 
 /* External Dependacies */
+#include <SDL2/SDL_vulkan.h>
+#include <SDL2/SDL.h>
 #include <vulkan/vulkan.h>
 #include <cglm/cglm.h>
 
@@ -52,14 +54,7 @@ typedef struct {
   VkFence in_flight;
   
   VkFramebuffer *framebuffers;
-
-  VkDescriptorPool descriptor_pool;
-  VkDescriptorSetLayout slow_layout; // rare frequency
-  VkDescriptorSet slow_set;
   
-  VkDescriptorSetLayout rapid_layout; // every frame
-  VkDescriptorSet* rapid_sets;
-
 } GfxPipeline;
 
 /* Device Buffer contains opaque handles to Vulkan buffers
@@ -71,7 +66,7 @@ typedef struct {
   VkBuffer handle;
   VkDeviceMemory memory;
   void* first_ptr;
-  void* *p_next;
+  void* p_next;
 } GfxBuffer;
 
 typedef struct {
@@ -81,6 +76,18 @@ typedef struct {
   VkSampler sampler;
 } ImageData;
 
+typedef struct {
+
+  VkDescriptorPool descriptor_pool;
+  VkDescriptorSetLayout slow_layout; // rare frequency
+  VkDescriptorSet slow_set;
+  GfxBuffer geometry;
+
+  VkDescriptorSetLayout rapid_layout; // every frame
+  VkDescriptorSet* rapid_sets;
+  ImageData textures[128];
+} GfxResources;
+
 /** Maths */
 typedef struct{
   vec3 pos;
@@ -89,31 +96,22 @@ typedef struct{
 } vertex;
 
 /* Stage 1 [Context + Swapchain] */
-int stage1_create(GfxContext*);
-int stage1_destroy(GfxContext);
+int context_create(GfxContext*);
+int context_destroy(GfxContext);
 
 /* Stage 2 [Pipeline + Descriptor Sets] */
-int stage2_create(GfxContext, GfxPipeline*);
-int stage2_destroy(GfxContext, GfxPipeline);
+int pipeline_create(GfxContext, GfxResources, GfxPipeline*);
+int pipeline_destroy(GfxContext, GfxPipeline);
 
 /* VKBuffer Memory Management memory.c */
 int buffer_create(GfxContext, VkDeviceSize, VkBufferUsageFlags, GfxBuffer* );
 int buffer_append(const void*, GfxBuffer*, size_t);
 void buffers_destroy(GfxContext, GfxBuffer*, int);
 
-/* Descriptor Sets */
-int  slow_descriptors_update(GfxContext, uint32_t, ImageData*, GfxPipeline*);
-int  slow_descriptors_alloc(VkDevice, GfxPipeline* );
-int  rapid_descriptors_alloc(GfxContext, GfxPipeline* );
-void rapid_descriptors_update(GfxContext, GfxPipeline, GfxBuffer* );
-
-/* images.c */
-int  image_view_create(VkDevice, VkImage,
-		  VkImageView*, VkFormat, VkImageAspectFlags);
-int  image_create(GfxContext, VkImage*, VkDeviceMemory*, VkFormat,
-		 VkImageUsageFlags, uint32_t, uint32_t);
-void image_destroy(GfxContext, ImageData* );
-int  image_file_load(GfxContext, unsigned char*,
-		    size_t, size_t, size_t, ImageData* );
+void image_destroy(GfxContext, ImageData*);
+int image_create(GfxContext, VkImage*, VkDeviceMemory*,
+		 VkFormat, VkImageUsageFlags, uint32_t, uint32_t);
+int image_view_create(VkDevice, VkImage, VkImageView*, VkFormat,
+		      VkImageAspectFlags);
 
 #endif /* RENDER_H */

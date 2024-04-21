@@ -15,14 +15,21 @@ buffers_destroy(GfxContext context, GfxBuffer *buffers, int count)
 int
 buffer_append(const void *data, GfxBuffer *dest, size_t size)
 {
-  if(dest->total_size < dest->used_size + size ){
-    printf("out of  memory!\n");
-    return 1;
-  }
+  if(dest->total_size < dest->used_size + size )return 1;
 
   void *write = ((uint8_t*)dest->first_ptr) + dest->used_size;
   memcpy(write, data, size);
   dest->used_size += size;
+  return 0;
+}
+
+int
+buffer_write(const void *data, GfxBuffer *dest, size_t size, size_t offset){
+
+  if(dest->total_size < offset + size)return 1;
+  
+  void *write = ((uint8_t*)dest->first_ptr) + offset;
+  memcpy(write, data, size);
   return 0;
 }
 
@@ -76,83 +83,130 @@ buffer_create(GfxContext context, VkDeviceSize size, VkBufferUsageFlags usage, G
 }
 
 
-int
-slow_descriptors_alloc(VkDevice l_dev, GfxPipeline *pipeline)
+void
+image_destroy(GfxContext context, ImageData *image)
 {
-  uint32_t max_binding = MAX_SAMPLERS -1;
-  VkDescriptorSetVariableDescriptorCountAllocateInfo count_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
-    .descriptorSetCount = 1,
-    .pDescriptorCounts = &max_binding,
-  };
-  
-  /* Allocate descriptor memory */
-  VkDescriptorSetAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-    .descriptorPool = pipeline->descriptor_pool,
-    .descriptorSetCount = 1,
-    .pSetLayouts = &pipeline->slow_layout,
-    .pNext = &count_info,
-  };
-
-  if(vkAllocateDescriptorSets(l_dev, &alloc_info, &pipeline->slow_set)
-     != VK_SUCCESS) return 1;
-
-  return 0;
+  vkDestroySampler(context.l_dev, image->sampler, NULL);
+  vkDestroyImageView(context.l_dev, image->view, NULL);
+  vkDestroyImage(context.l_dev, image->handle, NULL);
+  vkFreeMemory(context.l_dev, image->memory, NULL);
 }
 
 int
-slow_descriptors_update(GfxContext context, uint32_t count,
-			ImageData *textures, GfxPipeline *pipeline)
-/* count is the quantity of unique texture files
-   the renderer is going to need to allocate GPU memory for
-   to use at one time
- */
+sampler_create(GfxContext context, VkSampler *sampler)
 {
-  VkDescriptorImageInfo infos[count];
-  VkWriteDescriptorSet writes[count];
+
+  VkPhysicalDeviceProperties properties = { 0 };
+  vkGetPhysicalDeviceProperties(context.p_dev, &properties);
   
-  for(uint32_t i = 0; i < count; i++){
+  VkSamplerCreateInfo sampler_info = {
+    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+    .magFilter = VK_FILTER_NEAREST,
+    .minFilter = VK_FILTER_NEAREST,
+    .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    .anisotropyEnable = VK_FALSE,
+    .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+    .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+    .unnormalizedCoordinates = VK_FALSE,
+    .compareEnable = VK_FALSE,
+    .compareOp = VK_COMPARE_OP_ALWAYS,
+    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    .mipLodBias = 0.0f,
+    .minLod = 0.0f,
+    .maxLod = 0.0f,
+  };
+
+  if(vkCreateSampler(context.l_dev, &sampler_info, NULL, sampler)
+     != VK_SUCCESS){
+    printf("!failed to create buffer\n!");
+    return 1;
+  }
   
-    infos[i] = (VkDescriptorImageInfo){
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      .imageView = textures[i].view,
-      .sampler = textures[i].sampler,
-    };
-    
-    writes[i] = (VkWriteDescriptorSet){
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = pipeline->slow_set,
-      .dstBinding = 0,
-      .dstArrayElement = i,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .descriptorCount = 1,
-      .pImageInfo = &infos[i],
-    };
+  return 0;
+  
+}
+
+int
+image_create(GfxContext context, VkImage *image, VkDeviceMemory *image_memory,
+	     VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
+{
+  /* Allocate VkImage memory */
+  VkImageCreateInfo image_info = {
+    .sType= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .imageType = VK_IMAGE_TYPE_2D,
+    .extent.width = width,
+    .extent.height = height,
+    .extent.depth = 1,
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .format = format,
+    .tiling = VK_IMAGE_TILING_OPTIMAL,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    //.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+    .usage = usage,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .flags = 0,
+  };
+
+  if(vkCreateImage(context.l_dev, &image_info, NULL, image)
+     != VK_SUCCESS){
+    printf("failed to create image!\n");
+    return 1;
   }
 
-  vkUpdateDescriptorSets(context.l_dev, count, writes, 0, NULL); 
-  
+  VkMemoryRequirements mem_requirements;
+  vkGetImageMemoryRequirements(context.l_dev, *image, &mem_requirements);
+
+  VkMemoryAllocateInfo alloc_info = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = mem_requirements.size,
+    .memoryTypeIndex = vram_type_index(context.p_dev,
+				       mem_requirements.memoryTypeBits,
+				       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+
+  if(vkAllocateMemory(context.l_dev, &alloc_info, NULL, image_memory)
+     != VK_SUCCESS) {
+    printf("failed to allocate image memory\n");
+    return 1;
+  }
+
+  vkBindImageMemory(context.l_dev, *image, *image_memory, 0);
+
   return 0;
 }
 
 int
-rapid_descriptors_alloc(GfxContext context, GfxPipeline *pipeline)
+image_view_create(VkDevice l_dev, VkImage image,
+		  VkImageView *view, VkFormat format,
+		  VkImageAspectFlags aspect_flags)
 {
-
-  VkDescriptorSetLayout layouts[context.frame_c];
-  for(uint32_t i = 0; i < context.frame_c; i++)
-    layouts[i] = pipeline->rapid_layout;
-  
-  VkDescriptorSetAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-    .descriptorPool = pipeline->descriptor_pool,
-    .descriptorSetCount = context.frame_c,
-    .pSetLayouts = layouts,
-  };
-  pipeline->rapid_sets = malloc(context.frame_c * sizeof( VkDescriptorSet ));
-  if(vkAllocateDescriptorSets(context.l_dev, &alloc_info, pipeline->rapid_sets)
-     != VK_SUCCESS) return 1;
-
-  return 0;
+ VkImageViewCreateInfo create_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .subresourceRange.aspectMask = aspect_flags,
+      .subresourceRange.baseMipLevel = 0,
+      .subresourceRange.levelCount = 1,
+      .subresourceRange.baseArrayLayer = 0,
+      .subresourceRange.layerCount = 1,
+    };
+    if (vkCreateImageView(l_dev, &create_info, NULL, view)
+      != VK_SUCCESS){
+      printf("!failed to create image views!\n");
+      return 1;
+    }
+    return 0;
 }
+
+
+
+

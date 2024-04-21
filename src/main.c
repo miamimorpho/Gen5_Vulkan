@@ -3,170 +3,77 @@
 int
 main(void)
 {
-  /* SDL+Vulkan Init */
+  /* GLFW Init */
   GfxContext context;
-  stage1_create(&context);
+  context_create(&context);
 
+  /* Resources Descriptor Sets Creation */
+  GfxResources resources;
+  resources_init(context, &resources);
+  
   /* Fixed Pipeline Creation */
   GfxPipeline pipeline;
-  stage2_create(context, &pipeline);
-
-  /* Stage 3: Descriptor Sets Creation */
-  slow_descriptors_alloc(context.l_dev, &pipeline);
-  rapid_descriptors_alloc(context, &pipeline);
+  pipeline_create(context, resources, &pipeline);
 
   /* Camera Controls Init */
   Camera camera = camera_create(WIDTH, HEIGHT);
-  double front_vel = 0, strafe_vel = 0, speed = 0.5;
-  float pitch_vel = 0, yaw_vel = 0, sensitivity = 0.005;
   SDL_SetRelativeMouseMode(SDL_TRUE);
   
-  /* Memory Allocation */
-  int model_count = 3;
-  GfxBuffer geo_data;
-  geometry_buffer_create(context, 300000, &geo_data);
-  ImageData textures[model_count];
-
   /* Load gltf data to memory */
-  Entity car, car2, world;
-
-  entity_gltf_load(context, "models/Car2.glb",
-	    &geo_data, textures, &car);
-  make_plane(128, 128, &geo_data, &world);
-  entity_gltf_load(context, "models/CarBroken.glb",
-  	   &geo_data, textures, &car2);
+  GfxModelOffsets car_m, world_m;
   
-  
-
-  
-  /*
-  int entity_c = 100;
+  make_cube(&resources.geometry, &world_m);
+  world_m.textureIndex = png_load(context, "textures/dune.png", &resources);
+  entity_gltf_load(context, "models/CarBroken.glb", &car_m, &resources);
+ 
+  /* Init Entity Components */
+  int entity_c = 2;
   Entity entities[entity_c];
-  for(int x = 0; x < 10; x++){
-    for(int y = 0; y < 10; y++){
-      entities[(x * 10)+y] = entity_add1(car, x * 10, y * 10, 0);
-    }
-  }
-  */
-
-  
-  int entity_c = 3;
-  Entity entities[entity_c];
-  entities[0] = entity_add1(car,0, 0, 0);
-  entities[1] = entity_add1(car2, 16,0,0);
-  entities[2] = entity_add1(world, 0,0,5);
+  printf("car ti: %d\n", car_m.textureIndex);
+  entities[0] = entity_add1(car_m, 0, 0, 0);
+  entities[1] = entity_add1(world_m, 5, 5,1);
   
   /* Start Rendering */
-  slow_descriptors_update(context, entity_c -1, textures, &pipeline);
+  texture_descriptors_update(context, entity_c, resources);
   
-  GfxBuffer indirect_args[context.frame_c];
-  draw_args_create(context, pipeline, entity_c, indirect_args);
+  GfxBuffer draw_descriptors[context.frame_c];
+  draw_descriptors_create(context, resources, entity_c, draw_descriptors);
 
-  GfxBuffer indirect_draw;
-  draw_indirect_create(context, &indirect_draw, entity_c);
-
-  float rotate_test = 0;
+  GfxBuffer indirect;
+  draw_indirect_create(context, &indirect, entity_c);
   
   /* Main rendering loop */
   int running = 1;
-  SDL_Event event;
-  while(running > 0){
-    SDL_PollEvent( &event );
+  while(running){
+
+    running = main_input(context, &camera);
     
-    switch( event.type ) {
-      
-    case SDL_KEYDOWN:
-      switch( event.key.keysym.sym) {
-      case SDLK_LEFT:
-	strafe_vel = -speed;
-	break;
-      case SDLK_RIGHT:
-	strafe_vel = speed;
-	break;
-      case SDLK_UP:
-	front_vel = speed;
-	break;
-      case SDLK_DOWN:
-	front_vel = -speed;
-	break;
-      default:
-	break;
-      } break;
-   
-    case SDL_KEYUP:      
-      switch( event.key.keysym.sym){
-      case SDLK_LEFT:
-	if( strafe_vel < 0 ) strafe_vel = 0;
-	break;
-      case SDLK_RIGHT:
-       	if( strafe_vel > 0 ) strafe_vel = 0;
-	break;
-      case SDLK_UP:
-	if( front_vel > 0 ) front_vel = 0;
-	break;
-      case SDLK_DOWN:
-	if( front_vel < 0 ) front_vel = 0;
-	break;
-      default:
-	break;
-      } break;
-
-    case SDL_MOUSEMOTION:
-      yaw_vel = event.motion.xrel * sensitivity;
-      pitch_vel = event.motion.yrel * sensitivity;
-      break;
-      
-    case SDL_QUIT:
-      running = 0;
-      break;
-
-    default:
-      break;
-  
-    }
-    
-    /* Camera Movement */
-    camera_rotate(&camera, yaw_vel, pitch_vel);
-    pitch_vel = 0;
-    yaw_vel = 0;
-
-    /* Player Movement */
-    camera.pos[0] += camera.front[0] * front_vel;
-    camera.pos[1] += camera.front[1] * front_vel;
-    camera.pos[0] += camera.right[0] * strafe_vel;
-    camera.pos[1] += camera.right[1] * strafe_vel;
-
-    /* Model Movement */
-    rotate_test = (rotate_test + 0.01f);
-    
-    glm_quat(entities[1].rotate, rotate_test, 0.0f, 0.0f, -1.0);
-     
     /* Reset command buffer, set initial values */
     draw_start(&context, pipeline);
-    
-    /* Bind Slow Data    
-     * Textures, Vertices
-     */
-    geometry_buffer_bind(pipeline.command_buffer, geo_data);
-    
-    vkCmdBindDescriptorSets(pipeline.command_buffer,
+
+    /* Update Draw Arguments */
+    draw_descriptors_update(camera, entities,
+		     draw_descriptors[context.frame_index] );
+
+    draw_indirect_update(indirect, entities);
+
+    /* Bind geometry */
+    geometry_buffer_bind(pipeline.command_buffer, resources.geometry);
+
+    /* Bind sampler array */
+    vkCmdBindDescriptorSets(pipeline.command_buffer, 
 			    VK_PIPELINE_BIND_POINT_GRAPHICS,
 			    pipeline.layout, 0, 1,
-			    &pipeline.slow_set, 0, NULL);
+			    &resources.slow_set, 0, NULL);
 
-    /* Rapid / Per-frame data
-     * Transformation matrices, texture index
-     */
-    draw_args_update(camera, entities,
-		     indirect_args[context.frame_index] );
+    /* Bind draw arguments array */
     vkCmdBindDescriptorSets(pipeline.command_buffer,
 			    VK_PIPELINE_BIND_POINT_GRAPHICS,
 			    pipeline.layout, 1, 1,
-			    &pipeline.rapid_sets[context.frame_index],0, NULL);
+			    &resources.rapid_sets[context.frame_index],0, NULL);
 
-    /* ultimate draw call */
-    draw_indirect_update(indirect_draw, entities);
-    vkCmdDrawIndexedIndirect(pipeline.command_buffer, indirect_draw.handle, 0,
+    /* Final draw call */
+    vkCmdDrawIndexedIndirect(pipeline.command_buffer, indirect.handle, 0,
 			     entity_c, sizeof(VkDrawIndexedIndirectCommand));
     
     draw_end(context, pipeline);
@@ -178,11 +85,19 @@ main(void)
   /* Cleanup */
   VkFence fences[] = { pipeline.in_flight};
   vkWaitForFences(context.l_dev, 1, fences, VK_TRUE, UINT64_MAX);
-  models_destroy(context, model_count, geo_data, textures);
-  buffers_destroy(context, &indirect_draw, 1);
-  buffers_destroy(context, indirect_args, context.frame_c);
-  stage2_destroy(context, pipeline);
-  stage1_destroy(context);
+
+  printf("free textures\n");
+  unused_textures_free(context, entities, entity_c, resources.textures);
+
+  printf("free indirect\n");
+  buffers_destroy(context, &indirect, 1);
+  printf("free resources\n");
+  resources_destroy(context, resources);
+
+  buffers_destroy(context, draw_descriptors, context.frame_c);
+  
+  pipeline_destroy(context, pipeline);
+  context_destroy(context);
     
   return 0;
   }

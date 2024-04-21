@@ -1,7 +1,4 @@
-#include "vulkan_public.h"
-#include "solid.h"
-
-const vec3 CAMERA_UP = {0.0f, 0.0f, -1.0f};
+#include "drawing.h"
 
 int
 draw_start(GfxContext *context, GfxPipeline gfx)
@@ -96,7 +93,7 @@ model_matrix(Entity entity, mat4 *dest)
 }
 
 void
-draw_args_update(Camera cam, Entity *entities,
+draw_descriptors_update(Camera cam, Entity *entities,
 		 GfxBuffer buffer)
 {
   mat4 view;
@@ -107,7 +104,7 @@ draw_args_update(Camera cam, Entity *entities,
   for(int i = 0; i < c; i++){
     // get pointer from stride
     drawArgs *args_ptr = ((drawArgs*)buffer.first_ptr) +i;
-    args_ptr->texIndex = entities[i].texture_index;
+    args_ptr->texIndex = entities[i].model.textureIndex;
  
     mat4 model;
     model_matrix(entities[i], &model);
@@ -125,40 +122,17 @@ draw_args_update(Camera cam, Entity *entities,
  
 }
 
-void
-draw_args_create(GfxContext context, GfxPipeline pipeline,
-		  int count, GfxBuffer *buffers)
-{
-  VkDescriptorBufferInfo buffer_info[context.frame_c];
-  VkWriteDescriptorSet descriptor_write[context.frame_c];
+int
+geometry_buffer_bind(VkCommandBuffer commands, GfxBuffer geometry){
+  VkBuffer vertex_buffers[] = {geometry.handle};
+  VkDeviceSize offsets[] = {0};
 
-  VkDeviceSize delta_size = count * sizeof(drawArgs);
-  
-  for(uint32_t i = 0; i < context.frame_c; i++){
-    buffer_create(context,
-		  delta_size,
-		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-		  &buffers[i]
-		  );
-    buffers[i].used_size += delta_size;
-    
-    buffer_info[i] = (VkDescriptorBufferInfo){
-      .buffer = buffers[i].handle,
-      .offset = 0,
-      .range = buffers[i].total_size,
-    };
+  GfxBuffer *indices = (GfxBuffer*)geometry.p_next;
+  vkCmdBindVertexBuffers(commands, 0, 1, vertex_buffers, offsets);
+  vkCmdBindIndexBuffer(commands, indices->handle,
+		       0, VK_INDEX_TYPE_UINT32);
 
-    descriptor_write[i] = (VkWriteDescriptorSet){
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = pipeline.rapid_sets[i],
-      .dstBinding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .pBufferInfo = &buffer_info[i],
-    };
-  }
-  vkUpdateDescriptorSets(context.l_dev, context.frame_c,
-			 descriptor_write, 0, NULL);
+  return 0;
 }
 
 int
@@ -186,10 +160,10 @@ draw_indirect_update(GfxBuffer buffer, Entity *entities)
     VkDrawIndexedIndirectCommand* data_ptr =
       ((VkDrawIndexedIndirectCommand*)buffer.first_ptr) +i;
     //VkDrawIndexedIndirectCommand *data_ptr = buffer_ptr(buffer, i * stride);
-    data_ptr->indexCount = entities[i].indexCount;
+    data_ptr->indexCount = entities[i].model.indexCount;
     data_ptr->instanceCount = 1;
-    data_ptr->firstIndex = entities[i].firstIndex;
-    data_ptr->vertexOffset = entities[i].vertexOffset;
+    data_ptr->firstIndex = entities[i].model.firstIndex;
+    data_ptr->vertexOffset = entities[i].model.vertexOffset;
     data_ptr->firstInstance = i;
   }
   return 0;
@@ -250,54 +224,4 @@ draw_end(GfxContext context, GfxPipeline pipeline)
 }
 
 
-int
-camera_rotate(Camera *cam, float x_vel, float y_vel){
-  /*
-   * rotates camera front, up and right from mouse input
-   * cam [OUT]
-   * x_vel, yvel [IN]
-   */
-  
-  versor q, qPitch;
-  float yaw = x_vel * -1;
-  float pitch = y_vel * -1;
-
-  /* up/down clamp */
-  if (pitch > GLM_PI_2) pitch = GLM_PI_2;
-  if (pitch < -GLM_PI_2) pitch = -GLM_PI_2;
-
-  /* rotate camera by quaternion */
-  glm_quatv(q, yaw, cam->up);
-  glm_quatv(qPitch, pitch, cam->right);
-  glm_quat_mul(q, qPitch, q);
-  glm_quat_rotatev(q, cam->front, cam->front);
-
-  /* maintain axis-angle alignment */
-  glm_vec3_cross(cam->front, (vec3){0.0f, 0.0f, -1.0f}, cam->right);
-  glm_vec3_cross(cam->right, cam->front, cam->up);
-  
-  return 1;
-}
-
-Camera
-camera_create(int width, int height)
-{
-  Camera cam;
-
-  glm_vec3_copy( (vec3){0.0f, 0.0f, -2.0f}, cam.pos );
-  glm_vec3_copy( (vec3){1.0f, 0.0f, 0.0f}, cam.front );
-  glm_vec3_copy( (vec3){0.0f, 0.0f, -1.0f}, cam.up );
-  glm_vec3_cross(cam.front, cam.up, cam.right);
-  
-  float fov = glm_rad(90.0f);
-  float aspectRatio = width / height;
-  
-  float near = 0.5f;
-  float far= 500;
-
-  glm_perspective(fov, aspectRatio, near, far, cam.projection);
-  cam.projection[1][1] *= -1;
-  
-  return cam;
-}
 
