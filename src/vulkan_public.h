@@ -5,8 +5,8 @@
 #define RENDER_H
 
 /* External Dependacies */
-#include <SDL2/SDL_vulkan.h>
-#include <SDL2/SDL.h>
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <cglm/cglm.h>
 
@@ -23,6 +23,7 @@ extern const VkFormat cfg_format;
  */
 typedef struct {
   /* Device Data */
+  GLFWwindow* window;
   VkExtent2D extent; /* framebuffer dimensions */
   VkPhysicalDevice p_dev;     /* Physical Device */
   VkDevice l_dev;             /* Logical Device */
@@ -32,7 +33,7 @@ typedef struct {
 
   /* Swapchain Data */
   VkSwapchainKHR swapchain_handle;
-  uint32_t frame_index;
+  uint32_t current_frame_index;
   VkImage *frames;
   VkImageView *views;
 } GfxContext;
@@ -80,7 +81,7 @@ typedef struct {
 
   VkDescriptorPool descriptor_pool;
   VkDescriptorSetLayout slow_layout; // rare frequency
-  VkDescriptorSet slow_set;
+  VkDescriptorSet slow_sets;
   GfxBuffer geometry;
 
   VkDescriptorSetLayout rapid_layout; // every frame

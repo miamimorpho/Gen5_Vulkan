@@ -1,5 +1,15 @@
 TODO
 
-add mouse + keys movement
-add two different camera modes
-add nuklear GUI
+font rendering
+read files ( .bdf )
+generate texture file
+pre calculate character uv's and dimensions
+
+struct GfxCharOffsets{
+	vec2 uv[2]; // top left and bottom right
+	int width;
+};
+
+create indirect buffer of a buffer of GfxCharOffsets
+stretch quad by width
+shift x right by width

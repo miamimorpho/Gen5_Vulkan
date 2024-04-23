@@ -1,5 +1,6 @@
 models/
 textures/
 shaders/*.spv
+spare_parts/
 xsolid
 *~

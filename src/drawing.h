@@ -19,21 +19,18 @@ typedef struct {
 } Entity;
 
 /* Draw Commands solid_draw.c */
-int  draw_start(GfxContext*, GfxPipeline);
-int  draw_indirect_create(GfxContext, GfxBuffer*, int);
-void draw_descriptors_update(Camera, Entity *entities, GfxBuffer);
-int  draw_indirect_update(GfxBuffer, Entity* );
-int  draw_end(GfxContext, GfxPipeline);
+int draw_descriptors_update(GfxContext, GfxResources, int);
+int draw_start(GfxContext*, GfxPipeline);
 
-/* Geometry Memory Mangement */
-int geometry_buffer_bind(VkCommandBuffer, GfxBuffer);
+Entity entity_add1(GfxModelOffsets model, float x, float y, float z);
+void render_entity(GfxContext, Camera, Entity);
+
+int  draw_end(GfxContext, GfxPipeline, int);
 
 /* Shapes */
 int make_cube(GfxBuffer *geometry, GfxModelOffsets *model);
 int make_plane(int, int, GfxBuffer*, GfxModelOffsets*);
 
-
-Entity entity_add1(GfxModelOffsets model, float x, float y, float z);
-
+int draw_descriptors_free(GfxContext context);
 
 #endif /* SOLID_H */

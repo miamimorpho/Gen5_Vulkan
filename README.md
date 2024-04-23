@@ -8,7 +8,7 @@ renderer written in C99 + Vulkan
  - [X] FPS Camera Movement
  - [X] directional flat lighting
  - [X] basic simplex noise terrain generation
- - [ ] text rendering
+ - [ ] text rendering - ongoing
  - [ ] directional sprites
  - [ ] scripting language integration
  - [ ] garbage collection/ memory allocator
@@ -24,7 +24,7 @@ renderer written in C99 + Vulkan
 
 ## Libraries
 
-- **SDL2**: SDL2 is used for Wayland/Xorg support, as well as mouse and keyboard input handling.
+- **gflw**: is used for Wayland/Xorg support, as well as mouse and keyboard input handling.
 
 - **FastNoiseLite** [FastNoiseLite](https://github.com/Auburn/FastNoiseLite/tree/master/C)
 

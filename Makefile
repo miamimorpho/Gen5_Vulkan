@@ -3,7 +3,7 @@ NAME = xsolid
 CFLAGS = -Wall -Wextra -Wpedantic -std=c99  -fmax-errors=5 -g -O0 \
 	-I/usr/include/vulkan \
 	-I/usr/include/cglm
-LDFLAGS = -lSDL2 -lvulkan -lrt -lm -ldl -lpthread -lcglm
+LDFLAGS = -lglfw -lvulkan -lrt -lm -ldl -lpthread -lcglm
 CC = gcc
 SOURCES = $(wildcard src/*.c)
 ifeq ($(OPTION), clang)

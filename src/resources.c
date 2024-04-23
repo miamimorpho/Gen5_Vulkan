@@ -115,7 +115,7 @@ texture_descriptors_alloc(VkDevice l_dev, GfxResources *resources)
     .pNext = &count_info,
   };
 
-  if(vkAllocateDescriptorSets(l_dev, &alloc_info, &resources->slow_set)
+  if(vkAllocateDescriptorSets(l_dev, &alloc_info, &resources->slow_sets)
      != VK_SUCCESS) return 1;
 
   return 0;
@@ -123,12 +123,7 @@ texture_descriptors_alloc(VkDevice l_dev, GfxResources *resources)
 
 
 int
-texture_descriptors_update(GfxContext context, uint32_t count,
-			GfxResources resources)
-/* count is the quantity of unique texture files
-   the renderer is going to need to allocate GPU memory for
-   to use at one time
- */
+texture_descriptors_update(GfxContext context, GfxResources resources, uint32_t count)
 {
   VkDescriptorImageInfo infos[count];
   VkWriteDescriptorSet writes[count];
@@ -143,7 +138,7 @@ texture_descriptors_update(GfxContext context, uint32_t count,
     
     writes[i] = (VkWriteDescriptorSet){
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = resources.slow_set,
+      .dstSet = resources.slow_sets,
       .dstBinding = 0,
       .dstArrayElement = i,
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -178,40 +173,30 @@ draw_descriptors_alloc(GfxContext context, GfxResources *resources)
   return 0;
 }
 
-void
-draw_descriptors_create(GfxContext context, GfxResources resources,
-		  int count, GfxBuffer *buffers)
+int resources_bind(GfxContext context, GfxPipeline pipeline,
+		   GfxResources resources)
 {
-  VkDescriptorBufferInfo buffer_info[context.frame_c];
-  VkWriteDescriptorSet descriptor_write[context.frame_c];
 
-  VkDeviceSize delta_size = count * sizeof(drawArgs);
+  VkBuffer vertex_buffers[] = {resources.geometry.handle};
+  VkDeviceSize offsets[] = {0};
+
+  GfxBuffer *indices = (GfxBuffer*)resources.geometry.p_next;
+  vkCmdBindVertexBuffers(pipeline.command_buffer, 0, 1, vertex_buffers, offsets);
+  vkCmdBindIndexBuffer(pipeline.command_buffer, indices->handle,
+		       0, VK_INDEX_TYPE_UINT32);
+
+  vkCmdBindDescriptorSets(pipeline.command_buffer, 
+			  VK_PIPELINE_BIND_POINT_GRAPHICS,
+			  pipeline.layout, 0, 1,
+			  &resources.slow_sets, 0, NULL);
   
-  for(uint32_t i = 0; i < context.frame_c; i++){
-    buffer_create(context,
-		  delta_size,
-		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-		  &buffers[i]
-		  );
-    buffers[i].used_size += delta_size;
-    
-    buffer_info[i] = (VkDescriptorBufferInfo){
-      .buffer = buffers[i].handle,
-      .offset = 0,
-      .range = buffers[i].total_size,
-    };
+  vkCmdBindDescriptorSets(pipeline.command_buffer,
+			  VK_PIPELINE_BIND_POINT_GRAPHICS,
+			  pipeline.layout, 1, 1,
+			  &resources.rapid_sets[context.current_frame_index],
+			  0, NULL);
 
-    descriptor_write[i] = (VkWriteDescriptorSet){
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = resources.rapid_sets[i],
-      .dstBinding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .pBufferInfo = &buffer_info[i],
-    };
-  }
-  vkUpdateDescriptorSets(context.l_dev, context.frame_c,
-			 descriptor_write, 0, NULL);
+  return 0;
 }
 
 int resources_init(GfxContext context, GfxResources* resources){
@@ -273,6 +258,8 @@ int resources_destroy(GfxContext context, GfxResources resources){
   
   buffers_destroy(context, (GfxBuffer*)resources.geometry.p_next, 1);
   buffers_destroy(context, &resources.geometry, 1);
+
+ 
   
   vkDestroyDescriptorPool(context.l_dev, resources.descriptor_pool, NULL);
   vkDestroyDescriptorSetLayout(context.l_dev, resources.rapid_layout, NULL);

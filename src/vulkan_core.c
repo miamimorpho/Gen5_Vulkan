@@ -19,10 +19,8 @@ const VkFormat cfg_format = VK_FORMAT_B8G8R8A8_SRGB;
 /* File Specific Globals
  * used to isolate the handling of platform specific data
  */
-static SDL_Window* SDL_WINDOW;
 static VkInstance VULKAN_INSTANCE;
 static VkSurfaceKHR VULKAN_SURFACE;
-
 
 int
 queue_index(VkPhysicalDevice p_dev, VkQueueFlagBits required_flags)
@@ -47,21 +45,20 @@ queue_index(VkPhysicalDevice p_dev, VkQueueFlagBits required_flags)
  * return 0 REQUIRED FOR BOOT
  */
 int
-surface_create(GfxContext *stage1)
+surface_create(GfxContext *context)
 {
-  if(SDL_Vulkan_CreateSurface(SDL_WINDOW, VULKAN_INSTANCE,
-			      &VULKAN_SURFACE)
-     != SDL_TRUE){
-    printf("failed to create SDL_WINDOW surface");
-    SDL_DestroyWindow(SDL_WINDOW);
-    SDL_Quit();
+  if(glfwCreateWindowSurface(VULKAN_INSTANCE, context->window,
+			     NULL, &VULKAN_SURFACE)){
+    printf("failed to create glfw surface");
+    glfwDestroyWindow(context->window);
+    glfwTerminate();
     return 1;
   }
   
   /* Test for queue presentation support */
   VkBool32 present_support = VK_FALSE;
   vkGetPhysicalDeviceSurfaceSupportKHR
-    (stage1->p_dev, queue_index(stage1->p_dev, VK_QUEUE_GRAPHICS_BIT),
+    (context->p_dev, queue_index(context->p_dev, VK_QUEUE_GRAPHICS_BIT),
      VULKAN_SURFACE, &present_support);
   if(present_support == VK_FALSE){
     printf("!no device presentation support!\n");
@@ -70,10 +67,10 @@ surface_create(GfxContext *stage1)
   
   /* Find colour format */
   uint32_t format_c;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(stage1->p_dev, VULKAN_SURFACE,
+  vkGetPhysicalDeviceSurfaceFormatsKHR(context->p_dev, VULKAN_SURFACE,
 				       &format_c, NULL);
   VkSurfaceFormatKHR formats[format_c];
-  vkGetPhysicalDeviceSurfaceFormatsKHR(stage1->p_dev, VULKAN_SURFACE,
+  vkGetPhysicalDeviceSurfaceFormatsKHR(context->p_dev, VULKAN_SURFACE,
 				       &format_c, formats);
 
   VkBool32 supported = VK_FALSE;
@@ -89,10 +86,10 @@ surface_create(GfxContext *stage1)
   
   /* Presentation mode */
   uint32_t mode_c;
-  vkGetPhysicalDeviceSurfacePresentModesKHR(stage1->p_dev, VULKAN_SURFACE,
+  vkGetPhysicalDeviceSurfacePresentModesKHR(context->p_dev, VULKAN_SURFACE,
 					    &mode_c, NULL);
   VkPresentModeKHR modes[mode_c];
-  vkGetPhysicalDeviceSurfacePresentModesKHR(stage1->p_dev, VULKAN_SURFACE,
+  vkGetPhysicalDeviceSurfacePresentModesKHR(context->p_dev, VULKAN_SURFACE,
 					    &mode_c, modes);
 
   supported = VK_FALSE;
@@ -109,34 +106,32 @@ surface_create(GfxContext *stage1)
 }
 
 int
-swapchain_create(GfxContext *stage1)
+swapchain_create(GfxContext *context)
 {
-  int width, height;
-  SDL_Vulkan_GetDrawableSize(SDL_WINDOW, &width, &height);
-  stage1->extent.width = (uint32_t)width;
-  stage1->extent.height = (uint32_t)height;
+  context->extent.width = WIDTH;
+  context->extent.height = HEIGHT;
 
   VkSurfaceCapabilitiesKHR capable;
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR
-    (stage1->p_dev, VULKAN_SURFACE, &capable);
+    (context->p_dev, VULKAN_SURFACE, &capable);
 
-  if (capable.currentExtent.width != stage1->extent.width
-     || capable.currentExtent.height != stage1->extent.height) {
-    stage1->extent.width =
-      stage1->extent.width > capable.maxImageExtent.width ?
-      capable.maxImageExtent.width : stage1->extent.width;
+  if (capable.currentExtent.width != context->extent.width
+     || capable.currentExtent.height != context->extent.height) {
+    context->extent.width =
+      context->extent.width > capable.maxImageExtent.width ?
+      capable.maxImageExtent.width : context->extent.width;
 
-    stage1->extent.width =
-      stage1->extent.width < capable.minImageExtent.width ?
-      capable.minImageExtent.width : stage1->extent.width;
+    context->extent.width =
+      context->extent.width < capable.minImageExtent.width ?
+      capable.minImageExtent.width : context->extent.width;
     
-    stage1->extent.height =
-      stage1->extent.height > capable.maxImageExtent.height ?
-      capable.maxImageExtent.height : stage1->extent.height;
+    context->extent.height =
+      context->extent.height > capable.maxImageExtent.height ?
+      capable.maxImageExtent.height : context->extent.height;
 
-    stage1->extent.height =
-      stage1->extent.height < capable.minImageExtent.height ?
-      capable.minImageExtent.height : stage1->extent.height;
+    context->extent.height =
+      context->extent.height < capable.minImageExtent.height ?
+      capable.minImageExtent.height : context->extent.height;
   }
    
   uint32_t max_frame_c = capable.minImageCount + 1;
@@ -150,7 +145,7 @@ swapchain_create(GfxContext *stage1)
     .minImageCount = max_frame_c,
     .imageFormat = cfg_format,
     .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-    .imageExtent = stage1->extent,
+    .imageExtent = context->extent,
     .imageArrayLayers = 1,
     .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
     /* TODO: multiple queue indices ( current [0][0] ) */
@@ -164,8 +159,8 @@ swapchain_create(GfxContext *stage1)
     .oldSwapchain = VK_NULL_HANDLE,
   };
 
-  if (vkCreateSwapchainKHR(stage1->l_dev, &create_info, NULL,
-			   &stage1->swapchain_handle)
+  if (vkCreateSwapchainKHR(context->l_dev, &create_info, NULL,
+			   &context->swapchain_handle)
      != VK_SUCCESS){
     printf("!failed to create swap chain!\n");
     return 1;
@@ -173,17 +168,17 @@ swapchain_create(GfxContext *stage1)
 
   /* Create Image Views */
   vkGetSwapchainImagesKHR
-    (stage1->l_dev, stage1->swapchain_handle, &stage1->frame_c, NULL);
-  stage1->frames = malloc(stage1->frame_c * sizeof(VkImage));
-  stage1->views = malloc(stage1->frame_c * sizeof(VkImageView));
+    (context->l_dev, context->swapchain_handle, &context->frame_c, NULL);
+  context->frames = malloc(context->frame_c * sizeof(VkImage));
+  context->views = malloc(context->frame_c * sizeof(VkImageView));
 
   vkGetSwapchainImagesKHR
-    (stage1->l_dev, stage1->swapchain_handle,
-     &stage1->frame_c, stage1->frames);
+    (context->l_dev, context->swapchain_handle,
+     &context->frame_c, context->frames);
 
-  for (uint32_t i = 0; i < stage1->frame_c; i++) {
-    image_view_create(stage1->l_dev, stage1->frames[i],
-		      &stage1->views[i], cfg_format,
+  for (uint32_t i = 0; i < context->frame_c; i++) {
+    image_view_create(context->l_dev, context->frames[i],
+		      &context->views[i], cfg_format,
 		      VK_IMAGE_ASPECT_COLOR_BIT);
   }
 
@@ -383,10 +378,8 @@ instance_create()
     .apiVersion = vk_version,//VK_API_VERSION_1_3,
   };
 
-  uint32_t SDL_ext_c;
-  SDL_Vulkan_GetInstanceExtensions(SDL_WINDOW, &SDL_ext_c, NULL);
-  const char *SDL_ext[SDL_ext_c];
-  SDL_Vulkan_GetInstanceExtensions(SDL_WINDOW, &SDL_ext_c, SDL_ext);
+  uint32_t ext_c;
+  const char** ext = glfwGetRequiredInstanceExtensions(&ext_c);
 
   uint32_t vk_ext_c = 0;
   vkEnumerateInstanceExtensionProperties(NULL, &vk_ext_c, NULL);
@@ -395,16 +388,16 @@ instance_create()
 
   int ext_found;
   printf("instance extensions...\n");
-  for (uint32_t g = 0; g < SDL_ext_c; g++){
+  for (uint32_t g = 0; g < ext_c; g++){
     ext_found = 0;
     for (uint32_t i = 0; i < vk_ext_c; i++){
-      if (strcmp(SDL_ext[g], vk_ext[i].extensionName) == 0){
+      if (strcmp(ext[g], vk_ext[i].extensionName) == 0){
 	ext_found = 1;
 	printf("[X]\t%s\n", vk_ext[i].extensionName);
       }
     }
     if(!ext_found){
-      printf("!extension not found! %s\n", SDL_ext[g]);
+      printf("!extension not found! %s\n", ext[g]);
       return 1;
     }
   }
@@ -412,8 +405,8 @@ instance_create()
   VkInstanceCreateInfo create_info = {
     .sType= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     .pApplicationInfo = &app_info,
-    .enabledExtensionCount = SDL_ext_c,
-    .ppEnabledExtensionNames = SDL_ext,
+    .enabledExtensionCount = ext_c,
+    .ppEnabledExtensionNames = ext,
     .enabledLayerCount = 0,
   };
 
@@ -432,45 +425,57 @@ instance_create()
   return 0;
 }
 
-int context_create(GfxContext *stage1)
+int context_create(GfxContext *context)
 {
-  SDL_Init(SDL_INIT_VIDEO);
-  SDL_WINDOW = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_UNDEFINED,
-				 SDL_WINDOWPOS_UNDEFINED,
-				 WIDTH, HEIGHT,
-				 SDL_WINDOW_VULKAN);
+  if(!glfwInit()){
+    printf("glfw init failure\n");
+    return 1;
+  }
+ 
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  context->window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan/GLFW", NULL, NULL);
+  glfwMakeContextCurrent(context->window);
+  glfwSetInputMode(context->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetCursorPos(context->window, 0,0);
+
+  if (glfwRawMouseMotionSupported())
+    glfwSetInputMode(context->window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+ 
   
   if(instance_create() > 0)
     return 1;
 
-  if(devices_create(stage1) > 0) return 2;
+  
+  
+  if(devices_create(context) > 0) return 2;
 
-  command_pool_create(*stage1, &stage1->command_pool);
+  command_pool_create(*context, &context->command_pool);
 
-  if(surface_create(stage1) > 0) return 3;
+  if(surface_create(context) > 0) return 3;
 
-  if(swapchain_create(stage1) > 0) return 4;
+  if(swapchain_create(context) > 0) return 4;
 
   return 0;
 }
 
-int context_destroy(GfxContext stage1)
+int context_destroy(GfxContext context)
 {
-  for(uint32_t i = 0; i < stage1.frame_c; i++)
-    vkDestroyImageView(stage1.l_dev, stage1.views[i], NULL);
+  for(uint32_t i = 0; i < context.frame_c; i++)
+    vkDestroyImageView(context.l_dev, context.views[i], NULL);
 
-  free(stage1.views);
-  free(stage1.frames);
+  free(context.views);
+  free(context.frames);
  
-  vkDestroySwapchainKHR(stage1.l_dev, stage1.swapchain_handle, NULL);
+  vkDestroySwapchainKHR(context.l_dev, context.swapchain_handle, NULL);
 
-  vkDestroyDevice(stage1.l_dev, NULL);
+  vkDestroyDevice(context.l_dev, NULL);
   vkDestroySurfaceKHR(VULKAN_INSTANCE, VULKAN_SURFACE, NULL);
   vkDestroyInstance(VULKAN_INSTANCE, NULL);
 
-  SDL_DestroyWindow(SDL_WINDOW);
-  SDL_Quit();
- 
+  glfwDestroyWindow(context.window);
+  glfwTerminate();
+   
   return 0;
 }
 

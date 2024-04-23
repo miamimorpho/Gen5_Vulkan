@@ -8,8 +8,6 @@
 // we can build a quad by defining the polarity of its axis
 int make_cube(GfxBuffer *geometry, GfxModelOffsets *model){
 
-  float cen = 0.5f;
-
 vertex vertices[24] = {
   { { -0.500000, -0.500000, 0.500000 }, { 0.000000, 0.000000, 1.000000 }, { 6.000000, 0.000000},},
   { { 0.500000, -0.500000, 0.500000 }, { 0.000000, 0.000000, 1.000000 }, { 5.000000, 0.000000},},
