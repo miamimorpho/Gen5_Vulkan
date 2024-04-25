@@ -1,24 +1,18 @@
 #include "vulkan_public.h"
-
 #include <string.h>
-
 
 const int WIDTH = 640;
 const int HEIGHT = 480;
-const uint32_t MAX_SAMPLERS = 128;
 
 /* Device Extensions required to run */
 const char *cfg_device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, };
-
 /* Debug/Validation Layers */
 const int enable_debug = 1;
 const char *cfg_validation_layers[] = { "VK_LAYER_KHRONOS_validation", };
-
 const VkFormat cfg_format = VK_FORMAT_B8G8R8A8_SRGB;
 
-/* File Specific Globals
- * used to isolate the handling of platform specific data
- */
+/* START OF CODE */
+
 static VkInstance VULKAN_INSTANCE;
 static VkSurfaceKHR VULKAN_SURFACE;
 
@@ -39,11 +33,6 @@ queue_index(VkPhysicalDevice p_dev, VkQueueFlagBits required_flags)
   return -1;
 }
 
-/**
- * checks that colour format and presentation mode
- * are supported. returns 0 if all configs settings are supported
- * return 0 REQUIRED FOR BOOT
- */
 int
 surface_create(GfxContext *context)
 {
@@ -737,7 +726,7 @@ uber_pipeline_create(GfxContext context, GfxPipeline *gfx)
   attribute_descriptions[2].binding = 0;
   attribute_descriptions[2].location = 2;
   attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-  attribute_descriptions[2].offset = offsetof(vertex, tex);
+  attribute_descriptions[2].offset = offsetof(vertex, uv);
   
   VkVertexInputBindingDescription binding_description = {
     .binding = 0,

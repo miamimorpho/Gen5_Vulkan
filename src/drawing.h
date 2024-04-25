@@ -3,7 +3,7 @@
 
 #include <cglm/cglm.h>
 #include "vulkan_public.h"
-#include "loading.h"
+#include "resources.h"
 #include "input.h"
 
 typedef struct{
@@ -26,11 +26,7 @@ Entity entity_add1(GfxModelOffsets model, float x, float y, float z);
 void render_entity(GfxContext, Camera, Entity);
 
 int  draw_end(GfxContext, GfxPipeline, int);
-
-/* Shapes */
-int make_cube(GfxBuffer *geometry, GfxModelOffsets *model);
-int make_plane(int, int, GfxBuffer*, GfxModelOffsets*);
-
 int draw_descriptors_free(GfxContext context);
+
 
 #endif /* SOLID_H */

@@ -117,6 +117,20 @@ draw_start(GfxContext *context, GfxPipeline gfx)
   return 0;
 }
 
+Entity
+entity_add1(GfxModelOffsets model, float x, float y, float z){
+
+  Entity dest;
+  glm_vec3_copy( (vec3){x, y, z}, dest.pos);
+  glm_quat(dest.rotate, 0.0f, 0.0f, 0.0f, -1.0f);
+  
+  dest.model.indexCount = model.indexCount;
+  dest.model.firstIndex = model.firstIndex;
+  dest.model.vertexOffset = model.vertexOffset;
+  dest.model.textureIndex = model.textureIndex;
+  return dest;
+}
+
 int
 model_matrix(Entity entity, mat4 *dest)
 {
@@ -137,8 +151,8 @@ model_matrix(Entity entity, mat4 *dest)
 void render_entity(GfxContext context, Camera cam, Entity entity){
   mat4 view;
   glm_look(cam.pos, cam.front, cam.up, view);
-  
-  // get pointer from stride
+
+  // INDIRECT ARGS BUFFER
   drawArgs *args_ptr =
     ((drawArgs*)INDIRECT_ARGS_BUFFERS[context.current_frame_index].first_ptr)
     + CURRENT_INDIRECT_INDEX;
@@ -156,10 +170,10 @@ void render_entity(GfxContext context, Camera cam, Entity entity){
   glm_mat4_inv(model, args_ptr->rotate_m);
   glm_mat4_transpose(args_ptr->rotate_m);
 
+  // INDIRECT BUFFER
   VkDrawIndexedIndirectCommand* indirect_ptr =
     ((VkDrawIndexedIndirectCommand*)INDIRECT_BUFFER.first_ptr)
     +CURRENT_INDIRECT_INDEX;
-  //VkDrawIndexedIndirectCommand *data_ptr = buffer_ptr(buffer, i * stride);
   indirect_ptr->indexCount = entity.model.indexCount;
   indirect_ptr->instanceCount = 1;
   indirect_ptr->firstIndex = entity.model.firstIndex;
@@ -167,8 +181,6 @@ void render_entity(GfxContext context, Camera cam, Entity entity){
   indirect_ptr->firstInstance = CURRENT_INDIRECT_INDEX;
   
   CURRENT_INDIRECT_INDEX += 1;
-
-  
 }
 
 int

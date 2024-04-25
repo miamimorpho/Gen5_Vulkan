@@ -1,86 +1,10 @@
-#include "loading.h"
+#include "resources.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../extern/stb_image.h"
 
 #define CGLTF_IMPLEMENTATION
 #include "../extern/cgltf.h"
-
-
-int
-vertex_buffer_append(const vertex *vertices, GfxBuffer *dest, uint32_t count ){
-  return buffer_append(vertices, dest, count * sizeof(vertex) );
-}
-
-int
-index_buffer_append(const uint32_t *indices, GfxBuffer *dest, uint32_t count){
-  return buffer_append(indices, dest, count * sizeof(uint32_t) );
-}
-
-
-int texture_load(GfxContext context, unsigned char* pixels, ImageData* texture,
-		 int width, int height, int channels){
-
-  VkFormat format;
-  switch(channels){
-  case 4:
-    format = VK_FORMAT_R8G8B8A8_SRGB;
-    break;
-  case 3:
-    format = VK_FORMAT_R8G8B8_SRGB;
-    break;
-  default:
-    return 2;
-  }
-  
-  VkDeviceSize image_size = width * height * channels;
-  GfxBuffer image_b;
-  buffer_create(context, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		&image_b);
-
-  /* copy pixel data to buffer */
-  memcpy(image_b.first_ptr, pixels, image_size);
- 
-  image_create(context, &texture->handle, &texture->memory,
-	       format,
-	       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-	       width, height);
-
-  /* Copy the image buffer to a VkImage proper */
-  transition_image_layout(context, texture->handle,
-			  VK_IMAGE_LAYOUT_UNDEFINED,
-			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-  copy_buffer_to_image(context, image_b.handle, texture->handle,
-		       (uint32_t)width, (uint32_t)height);
-
-  transition_image_layout(context, texture->handle,
-			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-  buffers_destroy(context, &image_b, 1);
-
- 
-  
-  /* Create image view */
-  image_view_create(context.l_dev, texture->handle,
-		    &texture->view, format,
-		    VK_IMAGE_ASPECT_COLOR_BIT);
-  sampler_create(context, &texture->sampler);
-
-  return 0;
-}
-
-
-int textures_slot(GfxResources resources){
-  for(uint32_t i = 0; i < MAX_SAMPLERS; i ++){
-    if(resources.textures[i].handle == VK_NULL_HANDLE){
-      printf("texture slot: [%d]\n", i);
-      return i;
-    }
-  }
-  return MAX_SAMPLERS;
-}
 
 int png_load(GfxContext context, const char* filename, GfxResources *resources){
 
@@ -153,8 +77,8 @@ int gltf_skin_load(GfxContext context, cgltf_data* file, ImageData* texture){
  */
 
 int
-gltf_mesh_load(cgltf_data *data, GfxBuffer *dest,
-	       VkDrawIndexedIndirectCommand *indirect)
+gltf_mesh_load(cgltf_data* data, GfxBuffer* geometry,
+	       GfxModelOffsets* model)
 {
   /* currently only loads 1 mesh per model */
   uint32_t mesh_index = 0;
@@ -224,28 +148,27 @@ gltf_mesh_load(cgltf_data *data, GfxBuffer *dest,
       .pos = {pos_data[i * 3 ], pos_data[i * 3 +1 ], pos_data[i * 3 +2 ] },
       .normal =
       {normal_data[i * 3], normal_data[i * 3 + 1], normal_data[i * 3 + 2] },
-      .tex = {tex_data[i * 2 ], tex_data[i * 2 +1 ] },
+      .uv = {tex_data[i * 2 ], tex_data[i * 2 +1 ] },
     };
     vertices[i] = v;
   }
-  indirect->vertexOffset = dest->used_size / sizeof(vertex);
-  vertex_buffer_append(vertices, dest, pos_accessor->count );
-  /* Load indice data into int array */
-  /* Then load that into a vulkan buffer */
+ 
   cgltf_accessor* indices_accessor =
     data->meshes[mesh_index].primitives[primitive_index].indices;
 
   cgltf_uint indices[indices_accessor->count];
   cgltf_accessor_unpack_indices
     (indices_accessor, indices, indices_accessor->count);
-
-  GfxBuffer *dest_indices = (GfxBuffer*)dest->p_next;
   
-  indirect->firstIndex = dest_indices->used_size / sizeof(uint32_t);
-  indirect->indexCount = indices_accessor->count;
-
-  index_buffer_append(indices, dest_indices, indices_accessor->count);
-
+  model->vertexOffset = geometry->used_size / sizeof(vertex);
+  GfxBuffer* dest_indices = (GfxBuffer*)geometry->p_next;
+  model->firstIndex = dest_indices->used_size / sizeof(uint32_t);
+  model->indexCount = indices_accessor->count;
+  model->textureIndex = 0;
+  
+  geometry_load(vertices, pos_accessor->count,
+		indices, indices_accessor->count,
+		geometry, model);
   
   return 0;
 }
@@ -269,12 +192,7 @@ int entity_gltf_load(GfxContext context, const char* filename,
   if(cgltf_validate(data)
      != cgltf_result_success) return 1;
   
-  VkDrawIndexedIndirectCommand indirect;
-  if(gltf_mesh_load(data, &resources->geometry, &indirect)) return 2;
-
-  model->indexCount = indirect.indexCount;
-  model->firstIndex = indirect.firstIndex;
-  model->vertexOffset = indirect.vertexOffset;
+  if(gltf_mesh_load(data, &resources->geometry, model)) return 2;
 
   int ti = textures_slot(*resources);
   gltf_skin_load(context, data, &resources->textures[ti]);

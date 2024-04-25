@@ -10,10 +10,11 @@
 #include <vulkan/vulkan.h>
 #include <cglm/cglm.h>
 
+#define MAX_SAMPLERS 128
+
 extern const int WIDTH;
 extern const int HEIGHT;
 extern const int DEBUG;
-extern const uint32_t MAX_SAMPLERS;
 
 //extern const char *cfg_validation_layers[];
 extern const VkFormat cfg_format;
@@ -66,8 +67,8 @@ typedef struct {
   VkDeviceSize used_size;
   VkBuffer handle;
   VkDeviceMemory memory;
-  void* first_ptr;
   void* p_next;
+  void* first_ptr;
 } GfxBuffer;
 
 typedef struct {
@@ -86,14 +87,14 @@ typedef struct {
 
   VkDescriptorSetLayout rapid_layout; // every frame
   VkDescriptorSet* rapid_sets;
-  ImageData textures[128];
+  ImageData textures[MAX_SAMPLERS];
 } GfxResources;
 
 /** Maths */
 typedef struct{
   vec3 pos;
   vec3 normal;
-  vec2 tex;
+  vec2 uv;
 } vertex;
 
 /* Stage 1 [Context + Swapchain] */
@@ -107,7 +108,7 @@ int pipeline_destroy(GfxContext, GfxPipeline);
 /* VKBuffer Memory Management memory.c */
 int buffer_create(GfxContext, VkDeviceSize, VkBufferUsageFlags, GfxBuffer* );
 int buffer_append(const void*, GfxBuffer*, size_t);
-void buffers_destroy(GfxContext, GfxBuffer*, int);
+int  buffers_destroy(GfxContext, GfxBuffer*, int);
 
 void image_destroy(GfxContext, ImageData*);
 int image_create(GfxContext, VkImage*, VkDeviceMemory*,

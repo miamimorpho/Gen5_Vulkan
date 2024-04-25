@@ -8,7 +8,7 @@ renderer written in C99 + Vulkan
  - [X] FPS Camera Movement
  - [X] directional flat lighting
  - [X] basic simplex noise terrain generation
- - [ ] text rendering - ongoing
+ - [X] bdf font loading, ASCII text rendering
  - [ ] directional sprites
  - [ ] scripting language integration
  - [ ] garbage collection/ memory allocator

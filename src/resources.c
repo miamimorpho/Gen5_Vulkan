@@ -1,18 +1,48 @@
 #include "resources.h"
 
+int
+geometry_buffer_create(GfxContext context, GfxBuffer* geometry,
+		       size_t estimated_size)
+{
+  int err;
 
-Entity
-entity_add1(GfxModelOffsets model, float x, float y, float z){
+  GfxBuffer* vertices = (GfxBuffer*)malloc(sizeof(GfxBuffer));
+  GfxBuffer* indices = (GfxBuffer*)malloc(sizeof(GfxBuffer));
 
-  Entity dest;
-  glm_vec3_copy( (vec3){x, y, z}, dest.pos);
-  glm_quat(dest.rotate, 0.0f, 0.0f, 0.0f, -1.0f);
+  err = buffer_create(context,
+		estimated_size * sizeof(vertex),
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		vertices);
+
+  err = buffer_create(context,
+	        estimated_size * sizeof(uint32_t) * 2,
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		indices);
+
+  *geometry = *vertices;
+  geometry->p_next = (void*)indices;
+
+  return err;
+}
+
+int
+geometry_load(const vertex* vertices, uint32_t vertex_c,
+	      const uint32_t* indices, uint32_t index_c,
+	      GfxBuffer* dest, GfxModelOffsets* model){
   
-  dest.model.indexCount = model.indexCount;
-  dest.model.firstIndex = model.firstIndex;
-  dest.model.vertexOffset = model.vertexOffset;
-  dest.model.textureIndex = model.textureIndex;
-  return dest;
+  GfxBuffer* dest_indices = (GfxBuffer*)dest->p_next;
+
+  // we need to give offsets before we append to the geometry buffer
+  model->firstIndex = dest_indices->used_size / sizeof(uint32_t);
+  model->indexCount = index_c;
+  model->vertexOffset = dest->used_size / sizeof(vertex);
+  model->textureIndex = 0;
+
+  int err;
+  err = buffer_append(vertices, dest, vertex_c * sizeof(vertex));
+  err = buffer_append(indices, dest_indices, index_c * sizeof(uint32_t));
+ 
+  return err;
 }
 
 int
@@ -99,6 +129,11 @@ descriptor_set_layouts_create(VkDevice l_dev, GfxResources *resources)
 int
 texture_descriptors_alloc(VkDevice l_dev, GfxResources *resources)
 {
+  
+  for(int i = 0; i < MAX_SAMPLERS; i++){
+    resources->textures[i].view = VK_NULL_HANDLE;
+  }
+  
   uint32_t max_binding = MAX_SAMPLERS -1;
   VkDescriptorSetVariableDescriptorCountAllocateInfo count_info = {
     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
@@ -121,6 +156,72 @@ texture_descriptors_alloc(VkDevice l_dev, GfxResources *resources)
   return 0;
 }
 
+int texture_load(GfxContext context, unsigned char* pixels, ImageData* texture,
+		 int width, int height, int channels){
+
+  VkFormat format;
+  switch(channels){
+  case 4:
+    format = VK_FORMAT_R8G8B8A8_SRGB;
+    break;
+  case 3:
+    format = VK_FORMAT_R8G8B8_SRGB;
+    break;
+  case 1:
+    format = VK_FORMAT_R8_UNORM;
+    break;
+  default:
+    return 2;
+  }
+  
+  VkDeviceSize image_size = width * height * channels;
+  GfxBuffer image_b;
+  buffer_create(context, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		&image_b);
+
+  /* copy pixel data to buffer */
+  memcpy(image_b.first_ptr, pixels, image_size);
+ 
+  image_create(context, &texture->handle, &texture->memory,
+	       format,
+	       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+	       width, height);
+
+  /* Copy the image buffer to a VkImage proper */
+  transition_image_layout(context, texture->handle,
+			  VK_IMAGE_LAYOUT_UNDEFINED,
+			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  copy_buffer_to_image(context, image_b.handle, texture->handle,
+		       (uint32_t)width, (uint32_t)height);
+
+  transition_image_layout(context, texture->handle,
+			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  buffers_destroy(context, &image_b, 1);
+
+ 
+  
+  /* Create image view */
+  image_view_create(context.l_dev, texture->handle,
+		    &texture->view, format,
+		    VK_IMAGE_ASPECT_COLOR_BIT);
+  sampler_create(context, &texture->sampler);
+
+  return 0;
+}
+
+
+int textures_slot(GfxResources resources){
+  for(uint32_t i = 0; i < MAX_SAMPLERS; i++){
+    if(resources.textures[i].handle == VK_NULL_HANDLE){
+      printf("texture slot: [%d]\n", i);
+      return i;
+    }
+  }
+  return MAX_SAMPLERS;
+}
 
 int
 texture_descriptors_update(GfxContext context, GfxResources resources, uint32_t count)
@@ -173,18 +274,21 @@ draw_descriptors_alloc(GfxContext context, GfxResources *resources)
   return 0;
 }
 
-int resources_bind(GfxContext context, GfxPipeline pipeline,
-		   GfxResources resources)
-{
+int geometry_bind(GfxPipeline pipeline, GfxBuffer geometry){
 
-  VkBuffer vertex_buffers[] = {resources.geometry.handle};
+  VkBuffer vertex_buffers[] = {geometry.handle};
   VkDeviceSize offsets[] = {0};
-
-  GfxBuffer *indices = (GfxBuffer*)resources.geometry.p_next;
   vkCmdBindVertexBuffers(pipeline.command_buffer, 0, 1, vertex_buffers, offsets);
+
+  GfxBuffer *indices = (GfxBuffer*)geometry.p_next;
   vkCmdBindIndexBuffer(pipeline.command_buffer, indices->handle,
 		       0, VK_INDEX_TYPE_UINT32);
 
+}
+
+int resources_bind(GfxContext context, GfxPipeline pipeline,
+		   GfxResources resources)
+{
   vkCmdBindDescriptorSets(pipeline.command_buffer, 
 			  VK_PIPELINE_BIND_POINT_GRAPHICS,
 			  pipeline.layout, 0, 1,
@@ -233,8 +337,9 @@ int resources_init(GfxContext context, GfxResources* resources){
   return 0;
 }
 
+/*
 int unused_textures_free(GfxContext context, Entity *entities, uint32_t count,
-		     ImageData *textures){
+			 ImageData *textures){
 
   for(uint32_t i = 0; i < count; i++){
     int ti = entities[i].model.textureIndex;
@@ -246,6 +351,7 @@ int unused_textures_free(GfxContext context, Entity *entities, uint32_t count,
   }
   return 0;
 }
+*/
 
 int resources_destroy(GfxContext context, GfxResources resources){
 
@@ -256,11 +362,8 @@ int resources_destroy(GfxContext context, GfxResources resources){
     }
   }
   
-  buffers_destroy(context, (GfxBuffer*)resources.geometry.p_next, 1);
   buffers_destroy(context, &resources.geometry, 1);
 
- 
-  
   vkDestroyDescriptorPool(context.l_dev, resources.descriptor_pool, NULL);
   vkDestroyDescriptorSetLayout(context.l_dev, resources.rapid_layout, NULL);
   free(resources.rapid_sets);

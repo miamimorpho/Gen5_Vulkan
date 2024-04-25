@@ -1,6 +1,4 @@
-#include "vulkan_public.h"
-#include "drawing.h"
-#include "loading.h"
+#include "shapes.h"
 
 #define FNL_IMPL
 #include "../extern/FastNoiseLite.h"
@@ -40,17 +38,10 @@ vertex vertices[24] = {
   int vertex_c = sizeof(vertices)/sizeof(vertex);
   int index_c = sizeof(indices)/sizeof(uint32_t);
   
-  GfxBuffer* dest_indices = (GfxBuffer*)geometry->p_next;
-
-  // we need to give offsets before we append to the geometry buffer
-  model->firstIndex = dest_indices->used_size / sizeof(uint32_t);
-  model->indexCount = index_c;
-  model->vertexOffset = geometry->used_size / sizeof(vertex);
-  model->textureIndex = 0;
-  
-  index_buffer_append(indices, dest_indices, index_c );
-  vertex_buffer_append(vertices, geometry, vertex_c );
-
+  geometry_load(vertices, vertex_c,
+		indices, index_c,
+		geometry, model);
+    
   return 0;
 }
 
@@ -85,13 +76,9 @@ int generate_normals(vertex* vertices, uint32_t* indices, int vertex_c, int inde
   return 1;
 }
 
-int make_plane(int width, int height, GfxBuffer* dest, GfxModelOffsets* model){
+int make_plane(int width, int height, GfxBuffer* geometry,
+	       GfxModelOffsets* model){
 
-  /* units passed are quads
-   *
-   */
-
-  // generate vertices
   int vertex_c = (width +1)  * (height +1); // count vertices, not quads
   vertex* vertices;
   vertices = (vertex*)malloc(vertex_c * sizeof(vertex));
@@ -102,9 +89,10 @@ int make_plane(int width, int height, GfxBuffer* dest, GfxModelOffsets* model){
   for(int y = 0; y <= height; y++){
     for(int x = 0; x <= width; x++){
       vertex v = {
-	.pos = {(float)x -(width/2), (float)y -(height/2), fnlGetNoise2D(&noise, x, y) * 2},
+	.pos = {(float)x -(width/2), (float)y -(height/2),
+		fnlGetNoise2D(&noise, x, y) * 0},
 	.normal = {0.0f, 0.0f, 0.0f},
-	.tex ={(float)x / (float)width, (float)y / (float)height},
+	.uv ={(float)x / (float)width, (float)y / (float)height},
 	};
     vertices[y * (width +1) + x] = v;
     }
@@ -132,18 +120,9 @@ int make_plane(int width, int height, GfxBuffer* dest, GfxModelOffsets* model){
     indices[i +5] = bottomRight;
   }
 
-  GfxBuffer* dest_indices = (GfxBuffer*)dest->p_next;
-
-  // we need to give offsets before we append to the geometry buffer
-  model->firstIndex = dest_indices->used_size / sizeof(uint32_t);
-  model->indexCount = index_c;
-  model->vertexOffset = dest->used_size / sizeof(vertex);
-  model->textureIndex = 0;
-
   generate_normals(vertices, indices, vertex_c, index_c);
   
-  index_buffer_append(indices, dest_indices, index_c );
-  vertex_buffer_append(vertices, dest, vertex_c );
+  geometry_load(vertices, vertex_c, indices, index_c, geometry, model);
 
   free(vertices);
   free(indices);

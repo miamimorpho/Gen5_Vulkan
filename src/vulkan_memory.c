@@ -2,14 +2,22 @@
 #include "vulkan_util.h"
 #include <string.h>
 
-void
+int
 buffers_destroy(GfxContext context, GfxBuffer *buffers, int count)
 {
+  int err = 0;
+  
   for(int i = 0; i < count; i++){
+    if(buffers[i].p_next != NULL){
+      GfxBuffer* linked_buffer = (GfxBuffer*)buffers[i].p_next;
+      err = buffers_destroy(context, linked_buffer, 1);
+    }
     vkUnmapMemory(context.l_dev, buffers[i].memory);
     vkDestroyBuffer(context.l_dev, buffers[i].handle, NULL);
     vkFreeMemory(context.l_dev, buffers[i].memory, NULL);
   }
+
+  return err;
 }
 
 int
@@ -33,13 +41,6 @@ buffer_write(const void *data, GfxBuffer *dest, size_t size, size_t offset){
   return 0;
 }
 
-/**
- * A generalised way to allocate memory for vertex buffers
- * 'properties' defines the type of memory we want to use
- * memory allocating
- *
- * size is unit count * sizeof(unit)
- */
 int
 buffer_create(GfxContext context, VkDeviceSize size, VkBufferUsageFlags usage, GfxBuffer *buffer)
 {
@@ -78,6 +79,7 @@ buffer_create(GfxContext context, VkDeviceSize size, VkBufferUsageFlags usage, G
 
   buffer->total_size = size;
   buffer->used_size = 0;
+  buffer->p_next = NULL;
  
   return err;
 }
