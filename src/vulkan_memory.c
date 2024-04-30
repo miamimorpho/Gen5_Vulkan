@@ -3,95 +3,71 @@
 #include <string.h>
 
 int
-buffers_destroy(GfxContext context, GfxBuffer *buffers, int count)
+buffer_destroy(GfxContext context, GfxBuffer *buffers, int count)
 {
   int err = 0;
   
   for(int i = 0; i < count; i++){
-    if(buffers[i].p_next != NULL){
-      GfxBuffer* linked_buffer = (GfxBuffer*)buffers[i].p_next;
-      err = buffers_destroy(context, linked_buffer, 1);
+
+    GfxBuffer* b = &buffers[i];
+
+    VmaAllocationInfo b_info;
+    vmaGetAllocationInfo(context.allocator, b->allocation, &b_info);
+    
+    if(b_info.pUserData != NULL){
+      GfxBuffer* linked_buffer = (GfxBuffer*)b_info.pUserData;
+      err = buffer_destroy(context, linked_buffer, 1);
     }
-    vkUnmapMemory(context.l_dev, buffers[i].memory);
-    vkDestroyBuffer(context.l_dev, buffers[i].handle, NULL);
-    vkFreeMemory(context.l_dev, buffers[i].memory, NULL);
+
+    vmaDestroyBuffer(context.allocator, b->handle, b->allocation);
   }
 
   return err;
 }
 
 int
-buffer_append(const void *data, GfxBuffer *dest, size_t size)
-{
-  if(dest->total_size < dest->used_size + size )return 1;
-
-  void *write = ((uint8_t*)dest->first_ptr) + dest->used_size;
-  memcpy(write, data, size);
-  dest->used_size += size;
-  return 0;
-}
-
-int
-buffer_write(const void *data, GfxBuffer *dest, size_t size, size_t offset){
-
-  if(dest->total_size < offset + size)return 1;
-  
-  void *write = ((uint8_t*)dest->first_ptr) + offset;
-  memcpy(write, data, size);
-  return 0;
-}
-
-int
-buffer_create(GfxContext context, VkDeviceSize size, VkBufferUsageFlags usage, GfxBuffer *buffer)
-{
-  int err = 0;
-  
+buffer_create(GfxContext context, GfxBuffer* buffer,
+	      VkBufferUsageFlags usage,
+	      VmaAllocatorCreateFlags flags,
+	      VkDeviceSize size){
+    
   VkBufferCreateInfo buffer_info = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .size = size,
-    .usage = usage,
-    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .usage = usage
   };
 
-  if(vkCreateBuffer(context.l_dev, &buffer_info, NULL, &buffer->handle)
-     != VK_SUCCESS) err = 1;
-
-  VkMemoryRequirements mem_requirements;
-  vkGetBufferMemoryRequirements(context.l_dev, buffer->handle, &mem_requirements);
+/* potential usage flags
+ * VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+ * VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+ * VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+ * VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+ * VK_BUFFER_USAGE_TRANSFER_DST_BIT
+ *
+ */
   
-  VkMemoryAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = mem_requirements.size,
-    .memoryTypeIndex = vram_type_index
-    (context.p_dev, mem_requirements.memoryTypeBits,
-     (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-      | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
-    };
-  
-  if(vkAllocateMemory(context.l_dev, &alloc_info, NULL, &buffer->memory)
-     != VK_SUCCESS) err = 2;
+  VmaAllocationCreateInfo vma_alloc_info = {
+    .usage = VMA_MEMORY_USAGE_AUTO,
+    .flags = flags,
+  };
 
+  if(vmaCreateBuffer(context.allocator, &buffer_info, &vma_alloc_info,
+			    &buffer->handle,
+			    &buffer->allocation,
+		     NULL) != VK_SUCCESS)return 1;
 
-  vkBindBufferMemory(context.l_dev, buffer->handle, buffer->memory, 0);
-  vkMapMemory(context.l_dev, buffer->memory, 0,
-	      size, 0, &buffer->first_ptr);
-
-
-  buffer->total_size = size;
   buffer->used_size = 0;
-  buffer->p_next = NULL;
- 
-  return err;
+  
+  return 0;
 }
 
-
 void
-image_destroy(GfxContext context, ImageData *image)
+image_destroy(GfxContext context, GfxImage image)
 {
-  vkDestroySampler(context.l_dev, image->sampler, NULL);
-  vkDestroyImageView(context.l_dev, image->view, NULL);
-  vkDestroyImage(context.l_dev, image->handle, NULL);
-  vkFreeMemory(context.l_dev, image->memory, NULL);
+  
+  vkDestroySampler(context.l_dev, image.sampler, NULL);
+  vkDestroyImageView(context.l_dev, image.view, NULL);
+  vmaDestroyImage(context.allocator, image.handle, image.allocation);
 }
 
 int
@@ -131,9 +107,11 @@ sampler_create(GfxContext context, VkSampler *sampler)
 }
 
 int
-image_create(GfxContext context, VkImage *image, VkDeviceMemory *image_memory,
-	     VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
-{
+image_create(GfxContext context,
+	     VkImage *image, VmaAllocation *image_alloc,
+	     VkImageUsageFlags usage, VkFormat format,
+	     uint32_t width, uint32_t height){
+
   /* Allocate VkImage memory */
   VkImageCreateInfo image_info = {
     .sType= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -150,34 +128,16 @@ image_create(GfxContext context, VkImage *image, VkDeviceMemory *image_memory,
     .usage = usage,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .samples = VK_SAMPLE_COUNT_1_BIT,
-    .flags = 0,
   };
 
-  if(vkCreateImage(context.l_dev, &image_info, NULL, image)
-     != VK_SUCCESS){
-    printf("failed to create image!\n");
-    return 1;
-  }
-
-  VkMemoryRequirements mem_requirements;
-  vkGetImageMemoryRequirements(context.l_dev, *image, &mem_requirements);
-
-  VkMemoryAllocateInfo alloc_info = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = mem_requirements.size,
-    .memoryTypeIndex = vram_type_index(context.p_dev,
-				       mem_requirements.memoryTypeBits,
-				       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  VmaAllocationCreateInfo alloc_create_info = {
+    .usage = VMA_MEMORY_USAGE_AUTO,
+    .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+    .priority = 1.0f,
   };
-
-  if(vkAllocateMemory(context.l_dev, &alloc_info, NULL, image_memory)
-     != VK_SUCCESS) {
-    printf("failed to allocate image memory\n");
-    return 1;
-  }
-
-  vkBindImageMemory(context.l_dev, *image, *image_memory, 0);
-
+  
+  vmaCreateImage(context.allocator, &image_info, &alloc_create_info,
+		 image, image_alloc, NULL);
   return 0;
 }
 

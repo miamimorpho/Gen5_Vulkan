@@ -1,5 +1,56 @@
 #include "vulkan_util.h"
 
+VkShaderModule
+shader_module_create(VkDevice l_dev, long size, const char* code)
+{
+
+  VkShaderModuleCreateInfo create_info = {
+    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    .codeSize = size,
+    .pCode = (const uint32_t*)code
+  };
+
+  VkShaderModule shader_mod;
+  if (vkCreateShaderModule(l_dev, &create_info, NULL, &shader_mod)
+     != VK_SUCCESS) {
+    printf("failed to create shader module!");
+    return NULL;
+  }
+  
+  return shader_mod;
+}
+
+int
+shader_spv_load(VkDevice l_dev, const char* filename, VkShaderModule* shader)
+{
+  
+  FILE* file = fopen(filename, "rb");
+  if(file == NULL) {
+      printf("%s not found!", filename);
+      return 1;
+  }
+  if(fseek(file, 0l, SEEK_END) != 0) {
+    printf("failed to seek to end of file!");
+    return 1;
+  }
+  size_t buffer_size = ftell(file);
+  if (buffer_size == 0){
+    printf("failed to get file size!");
+    return 1;
+  }
+
+  char *spv_code = (char *)malloc(buffer_size * sizeof(char));
+  //char spv_code[*buffer_size];
+  rewind(file);
+  fread(spv_code, buffer_size, 1, file);
+  *shader = shader_module_create(l_dev, buffer_size, spv_code);
+  
+  fclose(file);
+  free(spv_code);
+
+  return 0;
+}
+
 /**
  * type_filter is the  memory type vulkan needs to use
  * mem_properties lists all available memory types on device

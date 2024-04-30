@@ -1,63 +1,65 @@
 #include "drawing.h"
 
-static int CURRENT_INDIRECT_INDEX;
 static GfxBuffer INDIRECT_BUFFER;
 static GfxBuffer* INDIRECT_ARGS_BUFFERS;
 
+/* causes segfault, need to initalise indirect draw buffer */
 int
-draw_descriptors_update(GfxContext context, GfxResources resources, int count)
+draw_indirect_init(GfxContext context, VkDescriptorSet* descriptor_sets, size_t draw_count)
 {
-  VkDescriptorBufferInfo buffer_info;
-  VkWriteDescriptorSet descriptor_write;
-
   INDIRECT_ARGS_BUFFERS = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
 
-  for(unsigned int i = 0; i < context.frame_c; i++){
-    buffer_create(context,
-		  count * sizeof(drawArgs),
-		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-		   | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-		  &INDIRECT_ARGS_BUFFERS[i]
-		  );
+  if(descriptor_sets == NULL)printf("special fail2\n");
   
-    buffer_info = (VkDescriptorBufferInfo){
-      .buffer = INDIRECT_ARGS_BUFFERS[i].handle,
-      .offset = 0,
-      .range = INDIRECT_ARGS_BUFFERS[i].total_size,
-    };
+  for(unsigned int i = 0; i < context.frame_c; i++){
+
+    GfxBuffer* b = &INDIRECT_ARGS_BUFFERS[i];
+    VkDeviceSize size = draw_count * sizeof(drawArgs);
     
-    descriptor_write = (VkWriteDescriptorSet){
+    buffer_create(context, b,
+		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT  
+		   | VK_BUFFER_USAGE_TRANSFER_DST_BIT), // usage
+		  (VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		   | VMA_ALLOCATION_CREATE_MAPPED_BIT ), // flags
+		  size);
+		 
+    VkDescriptorBufferInfo descriptor_buffer_info = {
+      .buffer = b->handle,
+      .offset = 0,
+      .range = size,
+    };    
+    VkWriteDescriptorSet descriptor_write = {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = resources.rapid_sets[i],
+      .dstSet = descriptor_sets[i],
       .dstBinding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
       .descriptorCount = 1,
-      .pBufferInfo = &buffer_info,
+      .pBufferInfo = &descriptor_buffer_info,
     };
-
+  
     vkUpdateDescriptorSets(context.l_dev, 1, &descriptor_write, 0, NULL);
   }
-  
-  buffer_create(context,
-		count * sizeof(VkDrawIndexedIndirectCommand),
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, &INDIRECT_BUFFER );
-  
+
+  buffer_create(context, &INDIRECT_BUFFER,
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+		(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		 | VMA_ALLOCATION_CREATE_MAPPED_BIT ),
+		draw_count * sizeof(VkDrawIndexedIndirectCommand));
+
   return 0;
 }
 
 int
-draw_start(GfxContext *context, GfxPipeline gfx)
+draw_start(GfxContext* context, GfxShader shader)
 {
-  CURRENT_INDIRECT_INDEX = 0;
-  
-  VkFence fences[] = { gfx.in_flight };
+  VkFence fences[] = { shader.in_flight };
   vkWaitForFences(context->l_dev, 1, fences, VK_TRUE, UINT64_MAX);
   vkResetFences(context->l_dev, 1, fences);
   
   vkAcquireNextImageKHR(context->l_dev, context->swapchain_handle, UINT64_MAX,
-			gfx.image_available, VK_NULL_HANDLE,
+			context->image_available, VK_NULL_HANDLE,
 			&context->current_frame_index);
-  vkResetCommandBuffer(gfx.command_buffer, 0);
+  vkResetCommandBuffer(context->command_buffer, 0);
 
   VkCommandBufferBeginInfo begin_info = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -65,7 +67,7 @@ draw_start(GfxContext *context, GfxPipeline gfx)
     .pInheritanceInfo = NULL,
   };
 
-  if(vkBeginCommandBuffer(gfx.command_buffer, &begin_info) != VK_SUCCESS){
+  if(vkBeginCommandBuffer(context->command_buffer, &begin_info) != VK_SUCCESS){
     printf("!failed to begin recording command buffer!\n");
   }
 
@@ -75,45 +77,17 @@ draw_start(GfxContext *context, GfxPipeline gfx)
  
   VkRenderPassBeginInfo render_pass_info = {
     .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-    .renderPass = gfx.render_pass,
-    .framebuffer = gfx.framebuffers[context->current_frame_index],
+    .renderPass = context->render_pass,
+    .framebuffer = context->framebuffers[context->current_frame_index],
     .renderArea.offset = {0, 0},
     .renderArea.extent = context->extent,
     .clearValueCount = 2,
     .pClearValues = clears,
   };
     
-  vkCmdBeginRenderPass(gfx.command_buffer, &render_pass_info,
+  vkCmdBeginRenderPass(context->command_buffer, &render_pass_info,
 		       VK_SUBPASS_CONTENTS_INLINE);
-
-  VkViewport viewport = {
-    .x = 0.0f,
-    .y = 0.0f,
-    .width = context->extent.width,
-    .height = context->extent.height,
-    .minDepth = 0.0f,
-    .maxDepth = 1.0f,
-  };
-  vkCmdSetViewport(gfx.command_buffer, 0, 1, &viewport);
-
-  VkRect2D scissor = {
-    .offset = {0, 0},
-    .extent = context->extent,
-  };
-    
-  vkCmdSetScissor(gfx.command_buffer, 0, 1, &scissor);
-  vkCmdBindPipeline(gfx.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-	            gfx.pipeline);
-
-  /*
-  VkBuffer vertex_buffers[] = {geo.vertices->handle};
-  VkDeviceSize offsets[] = {0};
-
-  vkCmdBindVertexBuffers(gfx.command_buffer, 0, 1, vertex_buffers, offsets);
-  vkCmdBindIndexBuffer(gfx.command_buffer, geo.indices->handle,
-		       0, VK_INDEX_TYPE_UINT32);
-  */
-		       
+	       
   return 0;
 }
 
@@ -148,59 +122,68 @@ model_matrix(Entity entity, mat4 *dest)
   return 0;
 }
 
-void render_entity(GfxContext context, Camera cam, Entity entity){
+void draw_entities(GfxContext context, Camera cam, Entity* entities, int count){
   mat4 view;
   glm_look(cam.pos, cam.front, cam.up, view);
 
-  // INDIRECT ARGS BUFFER
-  drawArgs *args_ptr =
-    ((drawArgs*)INDIRECT_ARGS_BUFFERS[context.current_frame_index].first_ptr)
-    + CURRENT_INDIRECT_INDEX;
-  args_ptr->texIndex = entity.model.textureIndex;
+  VmaAllocationInfo indirect;
+  vmaGetAllocationInfo(context.allocator,
+		       INDIRECT_BUFFER.allocation,
+		       &indirect);
   
-  mat4 model;
-  model_matrix(entity, &model);
+  VmaAllocationInfo indirect_args;
+  vmaGetAllocationInfo(context.allocator,
+	    INDIRECT_ARGS_BUFFERS[context.current_frame_index].allocation,
+		       &indirect_args);
   
-  // MVP matrix
-  mat4 vm;
-  glm_mat4_mul(view, model, vm);
-  glm_mat4_mul(cam.projection, vm, args_ptr->mvp);
+  for(int i = 0; i < count; i++){
+    Entity* entity = &entities[i];
+    // INDIRECT ARGS BUFFER
+    drawArgs *args_ptr = (drawArgs*)indirect_args.pMappedData + i;
+    args_ptr->texIndex = entity->model.textureIndex;
+    
+    mat4 model;
+    model_matrix(*entity, &model);
   
-  // Lighting Matrix
-  glm_mat4_inv(model, args_ptr->rotate_m);
-  glm_mat4_transpose(args_ptr->rotate_m);
+    // MVP matrix
+    mat4 vm;
+    glm_mat4_mul(view, model, vm);
+    glm_mat4_mul(cam.projection, vm, args_ptr->mvp);
+    
+    // Lighting Matrix
+    glm_mat4_inv(model, args_ptr->rotate_m);
+    glm_mat4_transpose(args_ptr->rotate_m);
 
-  // INDIRECT BUFFER
-  VkDrawIndexedIndirectCommand* indirect_ptr =
-    ((VkDrawIndexedIndirectCommand*)INDIRECT_BUFFER.first_ptr)
-    +CURRENT_INDIRECT_INDEX;
-  indirect_ptr->indexCount = entity.model.indexCount;
-  indirect_ptr->instanceCount = 1;
-  indirect_ptr->firstIndex = entity.model.firstIndex;
-  indirect_ptr->vertexOffset = entity.model.vertexOffset;
-  indirect_ptr->firstInstance = CURRENT_INDIRECT_INDEX;
-  
-  CURRENT_INDIRECT_INDEX += 1;
+    // INDIRECT BUFFER
+    VkDrawIndexedIndirectCommand* indirect_ptr =
+      (VkDrawIndexedIndirectCommand*)indirect.pMappedData + i;
+    indirect_ptr->indexCount = entity->model.indexCount;
+    indirect_ptr->instanceCount = 1;
+    indirect_ptr->firstIndex = entity->model.firstIndex;
+    indirect_ptr->vertexOffset = entity->model.vertexOffset;
+    indirect_ptr->firstInstance = i;
+  }
+
 }
 
 int
-draw_end(GfxContext context, GfxPipeline pipeline, int entity_c)
+draw_end(GfxContext context, int entity_c, GfxShader shader)
 {
-  vkCmdDrawIndexedIndirect(pipeline.command_buffer, INDIRECT_BUFFER.handle, 0,
+  vkCmdDrawIndexedIndirect(context.command_buffer, INDIRECT_BUFFER.handle, 0,
 			   entity_c, sizeof(VkDrawIndexedIndirectCommand));
   
-  vkCmdEndRenderPass(pipeline.command_buffer);
-  if(vkEndCommandBuffer(pipeline.command_buffer) != VK_SUCCESS) {
+  vkCmdEndRenderPass(context.command_buffer);
+  if(vkEndCommandBuffer(context.command_buffer) != VK_SUCCESS) {
     printf("!failed to record command buffer!");
     return 1;
   }
 
-  VkSemaphore wait_semaphores[] = { pipeline.image_available };
+  VkSemaphore wait_semaphores[] = { context.image_available };
   VkPipelineStageFlags wait_stages[] =
     {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-  VkSemaphore signal_semaphores[] = { pipeline.render_finished };
-  VkCommandBuffer command_buffers[] = { pipeline.command_buffer };
+  VkSemaphore signal_semaphores[] = { shader.render_finished };
+  VkCommandBuffer command_buffers[] = { context.command_buffer };
 
   VkSubmitInfo submit_info = {
     .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -213,7 +196,7 @@ draw_end(GfxContext context, GfxPipeline pipeline, int entity_c)
     .pSignalSemaphores = signal_semaphores,
   };
 
-  if(vkQueueSubmit(context.queue, 1, &submit_info, pipeline.in_flight)
+  if(vkQueueSubmit(context.queue, 1, &submit_info, shader.in_flight)
      != VK_SUCCESS) {
     printf("!failed to submit draw command buffer!\n");
     return 1;
@@ -239,9 +222,16 @@ draw_end(GfxContext context, GfxPipeline pipeline, int entity_c)
   return 0;
 }
 
-int draw_descriptors_free(GfxContext context){
-  buffers_destroy(context, INDIRECT_ARGS_BUFFERS, context.frame_c);
-  buffers_destroy(context, &INDIRECT_BUFFER, 1);
+int draw_indirect_free(GfxContext context, GfxShader* shader){
+
+  free(shader->descriptors);
+
+  buffer_destroy(context,
+		 INDIRECT_ARGS_BUFFERS,
+		 context.frame_c);
+  
+  buffer_destroy(context,
+		 &INDIRECT_BUFFER, 1);
 
   return 0;
   

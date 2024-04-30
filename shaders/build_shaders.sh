@@ -1,3 +1,6 @@
 #!/bin/sh
-glslangValidator -V shader.vert -o vert.spv
-glslangValidator -V shader.frag -o frag.spv
+glslangValidator -V model.vert -o model.vert.spv
+glslangValidator -V model.frag -o model.frag.spv
+
+glslangValidator -V text.vert -o text.vert.spv
+glslangValidator -V text.frag -o text.frag.spv

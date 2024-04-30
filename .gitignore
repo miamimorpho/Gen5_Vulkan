@@ -1,6 +1,7 @@
 models/
 textures/
 shaders/*.spv
+extern/*.o
 spare_parts/
 xsolid
 *~

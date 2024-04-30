@@ -1,0 +1,3 @@
+#!/bin/sh
+
+g++ -g -c vma.cpp -lvulkan -o vma.o

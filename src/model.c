@@ -1,28 +1,90 @@
-#include "resources.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "../extern/stb_image.h"
+#include "model.h"
+#include "textures.h"
 
 #define CGLTF_IMPLEMENTATION
 #include "../extern/cgltf.h"
 
-int png_load(GfxContext context, const char* filename, GfxResources *resources){
+int
+geometry_init(GfxContext context, GfxBuffer* geometry,
+		       size_t estimated_size)
+{
+  int err;
 
-  int ti = textures_slot(*resources);
-  
-  ImageData* dest = &resources->textures[ti];
-  
-  int x, y, n;
-  stbi_info(filename, &x, &y, &n);
-  printf("channels: %d\n", n);
-  unsigned char *pixels = stbi_load(filename, &x, &y, &n, n);
-  texture_load(context, pixels, dest, x, y, n);
+  GfxBuffer* geometry_indices = (GfxBuffer*)malloc(sizeof(GfxBuffer));
+  err = buffer_create(context, geometry_indices,
+		      VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		      estimated_size * sizeof(uint32_t) * 2 );
+  vmaSetAllocationName(context.allocator, geometry_indices->allocation,
+		       "geometry index buffer\n");
 
-  return ti;
+  
+  err = buffer_create(context, geometry,
+		      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		      estimated_size * sizeof(vertex3));
+  vmaSetAllocationName(context.allocator, geometry->allocation,
+		       "geometry vertex buffer\n");
+  vmaSetAllocationUserData(context.allocator, geometry->allocation,
+			   geometry_indices);
+
+  return err;
+}
+
+int
+geometry_load(GfxContext context,
+	      GfxStagingMesh staging,
+	      GfxBuffer* g, GfxModelOffsets* model){
+
+  VmaAllocationInfo g_vertices_info;
+  vmaGetAllocationInfo(context.allocator, g->allocation, &g_vertices_info);
+  GfxBuffer* g_indices = (GfxBuffer*)g_vertices_info.pUserData;
+  VmaAllocationInfo g_indices_info;
+  vmaGetAllocationInfo(context.allocator, g_indices->allocation, &g_indices_info);
+  
+  size_t vb_size = staging.vertex_c * sizeof(vertex3);
+  if(g_vertices_info.size < g->used_size + vb_size )return 1;
+  
+  size_t ib_size = staging.index_c * sizeof(uint32_t);
+  if(g_indices_info.size < g_indices->used_size + ib_size )return 1;
+  
+  // we need to give offsets before we append to the geometry buffer
+  model->firstIndex = g_indices->used_size / sizeof(uint32_t);
+  model->indexCount = staging.index_c;
+  model->vertexOffset = g->used_size / sizeof(vertex3);
+  model->textureIndex = 0;
+
+  int err;
+  err = vmaCopyMemoryToAllocation(context.allocator, staging.vertices,
+			    g->allocation, g->used_size, vb_size);
+  g->used_size += vb_size;
+  
+  err = vmaCopyMemoryToAllocation(context.allocator, staging.indices,
+				  g_indices->allocation, g_indices->used_size,
+				  ib_size);
+  g_indices->used_size += ib_size;
+  
+  return err;
+}
+
+int geometry_bind(GfxContext context, GfxBuffer g){
+
+  VmaAllocationInfo g_vertices_info;
+  vmaGetAllocationInfo(context.allocator, g.allocation, &g_vertices_info);
+  GfxBuffer* g_indices = (GfxBuffer*)g_vertices_info.pUserData;
+
+  VkBuffer vertex_buffers[] = {g.handle};
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(context.command_buffer, 0, 1, vertex_buffers, offsets);
+  vkCmdBindIndexBuffer(context.command_buffer, g_indices->handle,
+		       0, VK_INDEX_TYPE_UINT32);
+
+  return 0;
+
 }
 
 /* error 1 file format */
-int gltf_skin_load(GfxContext context, cgltf_data* file, ImageData* texture){
+int gltf_skin_load(GfxContext context, cgltf_data* file, uint32_t* index){
  /* Load image skin textures */
   cgltf_buffer_view* view = NULL;
   printf("loading textures [ ");
@@ -51,22 +113,8 @@ int gltf_skin_load(GfxContext context, cgltf_data* file, ImageData* texture){
     raw_pixels[i] = data[offset];
     offset += stride;
   }
-
-  /* Choose image format */
-  int width, height, channels;
-  stbi_info_from_memory(raw_pixels, size,
-			&width, &height, &channels);
-  /* interpret view file */
-  uint8_t* pixels = stbi_load_from_memory
-    ((uint8_t*)raw_pixels, size,
-     &width, &height, &channels, channels);
-  if(pixels == NULL) {
-    printf("failed to interpret raw pixel data\n");
-    return 2;
-  }
-
-  texture_load(context, pixels, texture, width, height, channels);
-  
+  texture_memory_load(context, raw_pixels, size, index);
+ 
   free(raw_pixels);
   
   return 0;
@@ -77,8 +125,7 @@ int gltf_skin_load(GfxContext context, cgltf_data* file, ImageData* texture){
  */
 
 int
-gltf_mesh_load(cgltf_data* data, GfxBuffer* geometry,
-	       GfxModelOffsets* model)
+gltf_mesh_load(cgltf_data* data, GfxStagingMesh* m)
 {
   /* currently only loads 1 mesh per model */
   uint32_t mesh_index = 0;
@@ -142,34 +189,26 @@ gltf_mesh_load(cgltf_data* data, GfxBuffer* geometry,
    * textures are 2D 32bit numbers
    */
   
-  vertex vertices[pos_accessor->count];
+  m->vertex_c = pos_accessor->count;
+  m->vertices = (vertex3*)malloc( m->vertex_c * sizeof(vertex3));
   for(size_t i = 0; i < pos_accessor->count; i++){
-    vertex v = {
+    vertex3 v = {
       .pos = {pos_data[i * 3 ], pos_data[i * 3 +1 ], pos_data[i * 3 +2 ] },
       .normal =
       {normal_data[i * 3], normal_data[i * 3 + 1], normal_data[i * 3 + 2] },
       .uv = {tex_data[i * 2 ], tex_data[i * 2 +1 ] },
     };
-    vertices[i] = v;
+    m->vertices[i] = v;
   }
  
   cgltf_accessor* indices_accessor =
     data->meshes[mesh_index].primitives[primitive_index].indices;
 
-  cgltf_uint indices[indices_accessor->count];
+  m->index_c = indices_accessor->count;
+  m->indices = (uint32_t*)malloc( m->index_c * sizeof(uint32_t));
   cgltf_accessor_unpack_indices
-    (indices_accessor, indices, indices_accessor->count);
-  
-  model->vertexOffset = geometry->used_size / sizeof(vertex);
-  GfxBuffer* dest_indices = (GfxBuffer*)geometry->p_next;
-  model->firstIndex = dest_indices->used_size / sizeof(uint32_t);
-  model->indexCount = indices_accessor->count;
-  model->textureIndex = 0;
-  
-  geometry_load(vertices, pos_accessor->count,
-		indices, indices_accessor->count,
-		geometry, model);
-  
+    (indices_accessor, m->indices, m->index_c);
+
   return 0;
 }
 
@@ -178,7 +217,7 @@ gltf_mesh_load(cgltf_data* data, GfxBuffer* geometry,
  * through the functions 'gltf_mesh_load' and 'gltf_skin_load'
  */
 int entity_gltf_load(GfxContext context, const char* filename,
-		     GfxModelOffsets *model, GfxResources *resources){ 
+		     GfxModelOffsets *model, GfxBuffer *geometry){ 
   cgltf_data* data;
   cgltf_options options = {0};
 
@@ -191,12 +230,13 @@ int entity_gltf_load(GfxContext context, const char* filename,
      != cgltf_result_success) return 1;
   if(cgltf_validate(data)
      != cgltf_result_success) return 1;
-  
-  if(gltf_mesh_load(data, &resources->geometry, model)) return 2;
 
-  int ti = textures_slot(*resources);
-  gltf_skin_load(context, data, &resources->textures[ti]);
-  model->textureIndex = ti;
+  GfxStagingMesh mesh;
+  if(gltf_mesh_load(data, &mesh)) return 2;
+
+  geometry_load(context, mesh, geometry, model);
+  
+  gltf_skin_load(context, data, &model->textureIndex);
 
   cgltf_free(data);
   

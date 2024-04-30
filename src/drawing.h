@@ -3,7 +3,7 @@
 
 #include <cglm/cglm.h>
 #include "vulkan_public.h"
-#include "resources.h"
+#include "model.h"
 #include "input.h"
 
 typedef struct{
@@ -19,14 +19,14 @@ typedef struct {
 } Entity;
 
 /* Draw Commands solid_draw.c */
-int draw_descriptors_update(GfxContext, GfxResources, int);
-int draw_start(GfxContext*, GfxPipeline);
+int draw_start(GfxContext*, GfxShader shader);
 
 Entity entity_add1(GfxModelOffsets model, float x, float y, float z);
-void render_entity(GfxContext, Camera, Entity);
+void draw_entities(GfxContext, Camera, Entity*, int count);
+int draw_indirect_init(GfxContext, VkDescriptorSet*, size_t);
+int draw_indirect_free(GfxContext context, GfxShader* shader);
 
-int  draw_end(GfxContext, GfxPipeline, int);
-int draw_descriptors_free(GfxContext context);
-
+int
+draw_end(GfxContext context, int entity_c, GfxShader shader);
 
 #endif /* SOLID_H */
