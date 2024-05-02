@@ -62,6 +62,8 @@ typedef struct {
 
   /* Timers */
   VkSemaphore image_available;
+  VkSemaphore render_finished;
+  VkFence in_flight;
   uint32_t current_frame_index;
 
   /* Global Texture Array */
@@ -71,13 +73,15 @@ typedef struct {
 } GfxContext;
 
 typedef struct {
-  VkDescriptorSetLayout descriptors_layout;
-  VkDescriptorSet* descriptors;
+  
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
 
-  VkSemaphore render_finished;
-  VkFence in_flight;
+  VkDescriptorSetLayout descriptors_layout;
+  VkDescriptorSet* descriptors;
+  GfxBuffer* uniform_b;
+  GfxBuffer indirect_b;
+
 } GfxShader;
 
 typedef struct {
@@ -117,8 +121,21 @@ image_create(GfxContext context,
 int image_view_create(VkDevice, VkImage, VkImageView*, VkFormat,
 		      VkImageAspectFlags);
 
-int ps1_pipeline_create(GfxContext context, GfxShader* shader);
+int model_shader_create(GfxContext context, GfxShader* shader);
 int pipeline_bind(GfxContext context, GfxShader shader);
 int pipeline_destroy(GfxContext context, GfxShader shader);
+
+int
+ssbo_descriptors_layout(VkDevice l_dev, VkDescriptorSetLayout* ssbo_layout);
+
+int
+ssbo_descriptors_alloc(GfxContext context,
+		       VkDescriptorSetLayout descriptors_layout,
+		       VkDescriptorSet* descriptor_sets,
+		       uint32_t count);
+int
+pipeline_layout_create(VkDevice l_dev,
+		       VkDescriptorSetLayout* descriptors_layouts,
+		       VkPipelineLayout* pipeline_layout);
 
 #endif /* RENDER_H */

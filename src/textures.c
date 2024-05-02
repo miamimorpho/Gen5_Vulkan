@@ -106,6 +106,8 @@ int
 texture_load(GfxContext context, unsigned char* pixels,
 	     int width, int height, int channels, uint32_t* index){
 
+  printf("TEXTURE LOAD()\n");
+  
   *index = textures_get_slot();
   GfxImage* texture = &g_texture_array[*index];
   
@@ -175,6 +177,7 @@ int texture_file_load(GfxContext context, const char* filename, uint32_t* index)
   printf("channels: %d\n", n);
   unsigned char* pixels = stbi_load(filename, &x, &y, &n, n);
   if(pixels == NULL){
+    printf("stbi_load() fail\n");
     return 1;
   }
   
@@ -185,18 +188,21 @@ int texture_file_load(GfxContext context, const char* filename, uint32_t* index)
 int texture_memory_load(GfxContext context, uint8_t* raw_pixels, size_t size,
 			uint32_t* index)
 {
+  printf("TEXTURE_MEMORY_LOAD\n");
   
   int width, height, channels;
   stbi_info_from_memory(raw_pixels, size,
 			&width, &height, &channels);
+  printf("stbi_info %d %d %d\n", width, height, channels);
   /* interpret view file */
   unsigned char* pixels = stbi_load_from_memory
-    ((uint8_t*)raw_pixels, size,
+    ((stbi_uc*)raw_pixels, size,
      &width, &height, &channels, channels);
   if(pixels == NULL) {
+    printf("stbi_load_from_memory() failed\n");
     return 1;
   }
-
+  
   texture_load(context, pixels, width, height, channels, index);
   return 0;
 } 
@@ -209,7 +215,8 @@ texture_descriptors_update(GfxContext context, uint32_t count)
 
   for(uint32_t i = 0; i < count; i++){
 
-    if(g_texture_array[i].handle == VK_NULL_HANDLE)continue;
+    printf("textures %d/%d\n", i, count);
+    if(g_texture_array[i].handle == VK_NULL_HANDLE)printf("texture loading error\n");
 
     infos[i] = (VkDescriptorImageInfo){
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

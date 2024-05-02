@@ -1,19 +1,13 @@
 #include "drawing.h"
 
-static GfxBuffer INDIRECT_BUFFER;
-static GfxBuffer* INDIRECT_ARGS_BUFFERS;
-
-/* causes segfault, need to initalise indirect draw buffer */
 int
-draw_indirect_init(GfxContext context, VkDescriptorSet* descriptor_sets, size_t draw_count)
+indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count)
 {
-  INDIRECT_ARGS_BUFFERS = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
-
-  if(descriptor_sets == NULL)printf("special fail2\n");
+  shader->uniform_b = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
   
   for(unsigned int i = 0; i < context.frame_c; i++){
 
-    GfxBuffer* b = &INDIRECT_ARGS_BUFFERS[i];
+    GfxBuffer* b = &shader->uniform_b[i];
     VkDeviceSize size = draw_count * sizeof(drawArgs);
     
     buffer_create(context, b,
@@ -30,7 +24,7 @@ draw_indirect_init(GfxContext context, VkDescriptorSet* descriptor_sets, size_t 
     };    
     VkWriteDescriptorSet descriptor_write = {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = descriptor_sets[i],
+      .dstSet = shader->descriptors[i],
       .dstBinding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
       .descriptorCount = 1,
@@ -40,7 +34,7 @@ draw_indirect_init(GfxContext context, VkDescriptorSet* descriptor_sets, size_t 
     vkUpdateDescriptorSets(context.l_dev, 1, &descriptor_write, 0, NULL);
   }
 
-  buffer_create(context, &INDIRECT_BUFFER,
+  buffer_create(context, &shader->indirect_b,
 		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 		(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
 		 | VMA_ALLOCATION_CREATE_MAPPED_BIT ),
@@ -50,9 +44,9 @@ draw_indirect_init(GfxContext context, VkDescriptorSet* descriptor_sets, size_t 
 }
 
 int
-draw_start(GfxContext* context, GfxShader shader)
+draw_start(GfxContext* context)
 {
-  VkFence fences[] = { shader.in_flight };
+  VkFence fences[] = { context->in_flight };
   vkWaitForFences(context->l_dev, 1, fences, VK_TRUE, UINT64_MAX);
   vkResetFences(context->l_dev, 1, fences);
   
@@ -122,18 +116,18 @@ model_matrix(Entity entity, mat4 *dest)
   return 0;
 }
 
-void draw_entities(GfxContext context, Camera cam, Entity* entities, int count){
+void draw_entities(GfxContext context, GfxShader shader, Camera cam, Entity* entities, int count){
   mat4 view;
   glm_look(cam.pos, cam.front, cam.up, view);
 
   VmaAllocationInfo indirect;
   vmaGetAllocationInfo(context.allocator,
-		       INDIRECT_BUFFER.allocation,
+		       shader.indirect_b.allocation,
 		       &indirect);
   
   VmaAllocationInfo indirect_args;
   vmaGetAllocationInfo(context.allocator,
-	    INDIRECT_ARGS_BUFFERS[context.current_frame_index].allocation,
+		       shader.uniform_b[context.current_frame_index].allocation,
 		       &indirect_args);
   
   for(int i = 0; i < count; i++){
@@ -164,14 +158,14 @@ void draw_entities(GfxContext context, Camera cam, Entity* entities, int count){
     indirect_ptr->firstInstance = i;
   }
 
+  vkCmdDrawIndexedIndirect(context.command_buffer, shader.indirect_b.handle, 0,
+			   count, sizeof(VkDrawIndexedIndirectCommand));
 }
 
 int
-draw_end(GfxContext context, int entity_c, GfxShader shader)
+draw_end(GfxContext context)
 {
-  vkCmdDrawIndexedIndirect(context.command_buffer, INDIRECT_BUFFER.handle, 0,
-			   entity_c, sizeof(VkDrawIndexedIndirectCommand));
-  
+
   vkCmdEndRenderPass(context.command_buffer);
   if(vkEndCommandBuffer(context.command_buffer) != VK_SUCCESS) {
     printf("!failed to record command buffer!");
@@ -182,7 +176,7 @@ draw_end(GfxContext context, int entity_c, GfxShader shader)
   VkPipelineStageFlags wait_stages[] =
     {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-  VkSemaphore signal_semaphores[] = { shader.render_finished };
+  VkSemaphore signal_semaphores[] = { context.render_finished };
   VkCommandBuffer command_buffers[] = { context.command_buffer };
 
   VkSubmitInfo submit_info = {
@@ -196,7 +190,7 @@ draw_end(GfxContext context, int entity_c, GfxShader shader)
     .pSignalSemaphores = signal_semaphores,
   };
 
-  if(vkQueueSubmit(context.queue, 1, &submit_info, shader.in_flight)
+  if(vkQueueSubmit(context.queue, 1, &submit_info, context.in_flight)
      != VK_SUCCESS) {
     printf("!failed to submit draw command buffer!\n");
     return 1;
@@ -220,21 +214,6 @@ draw_end(GfxContext context, int entity_c, GfxShader shader)
   }
   
   return 0;
-}
-
-int draw_indirect_free(GfxContext context, GfxShader* shader){
-
-  free(shader->descriptors);
-
-  buffer_destroy(context,
-		 INDIRECT_ARGS_BUFFERS,
-		 context.frame_c);
-  
-  buffer_destroy(context,
-		 &INDIRECT_BUFFER, 1);
-
-  return 0;
-  
 }
 
 

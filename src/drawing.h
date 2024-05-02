@@ -18,15 +18,15 @@ typedef struct {
   GfxModelOffsets model;
 } Entity;
 
+int indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count);
+
 /* Draw Commands solid_draw.c */
-int draw_start(GfxContext*, GfxShader shader);
+int draw_start(GfxContext*);
 
 Entity entity_add1(GfxModelOffsets model, float x, float y, float z);
-void draw_entities(GfxContext, Camera, Entity*, int count);
-int draw_indirect_init(GfxContext, VkDescriptorSet*, size_t);
-int draw_indirect_free(GfxContext context, GfxShader* shader);
+void draw_entities(GfxContext, GfxShader, Camera, Entity*, int count);
 
 int
-draw_end(GfxContext context, int entity_c, GfxShader shader);
+draw_end(GfxContext context);
 
 #endif /* SOLID_H */

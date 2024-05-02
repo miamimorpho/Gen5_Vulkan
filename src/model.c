@@ -216,7 +216,7 @@ gltf_mesh_load(cgltf_data* data, GfxStagingMesh* m)
  * Public function for model loading, hides the cgltf_data format
  * through the functions 'gltf_mesh_load' and 'gltf_skin_load'
  */
-int entity_gltf_load(GfxContext context, const char* filename,
+int gltf_load(GfxContext context, const char* filename,
 		     GfxModelOffsets *model, GfxBuffer *geometry){ 
   cgltf_data* data;
   cgltf_options options = {0};

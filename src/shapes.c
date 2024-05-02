@@ -2,7 +2,6 @@
 #include "model.h"
 
 #define FNL_IMPL
-#include "../extern/FastNoiseLite.h"
 
 // we can build a quad by defining the polarity of its axis
 int make_cube(GfxContext context, GfxBuffer* dest, GfxModelOffsets* model)
@@ -86,14 +85,10 @@ int make_plane(GfxContext context, int width, int height, GfxBuffer* geometry,
   vertex3* vertices;
   vertices = (vertex3*)malloc(vertex_c * sizeof(vertex3));
 
-  fnl_state noise = fnlCreateState();
-  noise.noise_type = FNL_NOISE_OPENSIMPLEX2;
-
   for(int y = 0; y <= height; y++){
     for(int x = 0; x <= width; x++){
       vertex3 v = {
-	.pos = {(float)x -(width/2), (float)y -(height/2),
-		fnlGetNoise2D(&noise, x, y) * 0},
+	.pos = {(float)x -(width/2), (float)y -(height/2), 0},
 	.normal = {0.0f, 0.0f, 0.0f},
 	.uv ={(float)x / (float)width, (float)y / (float)height},
 	};

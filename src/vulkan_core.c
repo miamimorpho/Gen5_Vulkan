@@ -648,6 +648,32 @@ descriptor_pool_create(GfxContext context, VkDescriptorPool* descriptor_pool)
   return 0;
 }
 
+
+int
+sync_bits_create(GfxContext* context)
+{
+  VkSemaphoreCreateInfo semaphore_info = {
+    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+  };
+
+  VkFenceCreateInfo fence_info = {
+    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+  };
+  
+  if(vkCreateSemaphore(context->l_dev, &semaphore_info,
+		       NULL, &context->render_finished) != VK_SUCCESS ||
+     vkCreateSemaphore(context->l_dev, &semaphore_info,
+		       NULL, &context->image_available) != VK_SUCCESS ||
+     vkCreateFence(context->l_dev, &fence_info,
+		   NULL, &context->in_flight) != VK_SUCCESS ){
+    printf("!failed to create sync objects!\n");
+    return 1;
+  }
+
+  return 0;
+}
+
 int context_create(GfxContext *context)
 {
   if(!glfwInit()){
@@ -690,20 +716,18 @@ int context_create(GfxContext *context)
   command_buffer_create(*context, &context->command_buffer);
 
   descriptor_pool_create(*context, &context->descriptor_pool);
-  
-  VkSemaphoreCreateInfo semaphore_info ={
-    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-  };
-  
-  if(vkCreateSemaphore(context->l_dev, &semaphore_info,
-		       NULL, &context->image_available)
-     != VK_SUCCESS)return 5;
-  
+
+  sync_bits_create(context);
+
   return 0;
 }
 
 int context_destroy(GfxContext context)
 {
+  vkDestroySemaphore(context.l_dev, context.image_available, NULL);
+  vkDestroySemaphore(context.l_dev, context.render_finished, NULL);
+  vkDestroyFence(context.l_dev, context.in_flight, NULL);
+  
   vkDestroyDescriptorSetLayout(context.l_dev,
 			       context.texture_descriptors_layout, NULL);
   

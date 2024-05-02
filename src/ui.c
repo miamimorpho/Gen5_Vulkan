@@ -6,13 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define L_LEN 80
-#define W_LEN 8
-
 static int FONT_LOADED = 0;
 
 int bdf_load(GfxFont* font, char* filename){
 
+  const int L_LEN = 80;
+  const int W_LEN = 8;
+  printf("BDF_LOAD\n");
+  
   FILE *fp = fopen(filename, "r");
   if(fp == NULL) {
     printf("Error opening font file\n");
@@ -73,7 +74,8 @@ int bdf_load(GfxFont* font, char* filename){
     printf("not enough config information\n");
     return 2;
   }/* META LOADING END */
-
+  printf("font supported\n");
+  
   int image_size = font->glyph_width
     * font->glyph_c
     * font->height;
@@ -141,24 +143,32 @@ int bdf_load(GfxFont* font, char* filename){
   return 0;
   
 }
+
 int gfx_font_load(GfxContext context, GfxFont* font, char* filename){
-  if(bdf_load(font, filename) > 0 )return 1;
-  texture_memory_load(context, font->pixels,
-		      font->glyph_c * font->glyph_width * font->height,
-		      &font->texture_index);
+  int err;
+  
+  err = bdf_load(font, filename);
+
+  int width = font->glyph_width * font->glyph_c;
+  
+  err = texture_load(context, font->pixels, width, font->height, 1,
+		     &font->texture_index);
+
   FONT_LOADED = 1;
   
-  return 0;
+  return err;
 }
 
-int
-ui_pipeline_create(GfxContext context, GfxShader *shader)
+
+int text_pipeline_create(GfxContext context,
+		      VkPipelineLayout pipeline_layout,
+		      VkPipeline* pipeline)
 {
   VkShaderModule vert_shader;
   shader_spv_load(context.l_dev, "shaders/text.vert.spv", &vert_shader);
   VkShaderModule frag_shader;
   shader_spv_load(context.l_dev, "shaders/text.frag.spv", &frag_shader);
-
+  
   VkPipelineShaderStageCreateInfo vert_info = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
     .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -180,10 +190,16 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
 
   VkPipelineDepthStencilStateCreateInfo depth_stencil = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-    .depthTestEnable = VK_FALSE,
-    .depthWriteEnable = VK_FALSE,
-    .depthCompareOp = VK_COMPARE_OP_ALWAYS,
-  };
+    .depthTestEnable = VK_TRUE,
+    .depthWriteEnable = VK_TRUE,
+    .depthCompareOp = VK_COMPARE_OP_LESS,
+    .depthBoundsTestEnable = VK_FALSE,
+    .minDepthBounds = 0.0f,
+    .maxDepthBounds = 1.0f,
+    .stencilTestEnable = VK_FALSE,
+    .front = { 0 },
+    .back = { 0 },
+  }; // Model Specific
   
   VkDynamicState dynamic_states[2] =
     { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -195,7 +211,7 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
   };
 
   // Vertex Buffer Creation
-  VkVertexInputAttributeDescription attribute_descriptions[3];
+  VkVertexInputAttributeDescription attribute_descriptions[2];
   attribute_descriptions[0].binding = 0;
   attribute_descriptions[0].location = 0;
   attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -278,7 +294,11 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
     | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
     .blendEnable = VK_TRUE,
     .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    .colorBlendOp = VK_BLEND_OP_ADD, // Optional
+    .srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA, // Optional
+    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // Optional
+    .alphaBlendOp = VK_BLEND_OP_ADD, // Optional
   };
 
   VkPipelineColorBlendStateCreateInfo color_blend_info = {
@@ -292,7 +312,7 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
     .blendConstants[2] = 0.0f,
     .blendConstants[3] = 0.0f,
   };
- 
+
   VkGraphicsPipelineCreateInfo pipeline_info = {
     .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
     .stageCount = 2,
@@ -305,7 +325,7 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
     .pDepthStencilState = &depth_stencil,
     .pColorBlendState = &color_blend_info,
     .pDynamicState = &dynamic_state_info,
-    .layout = shader->pipeline_layout,
+    .layout = pipeline_layout,
     .renderPass = context.render_pass,
     .subpass = 0,
     .basePipelineHandle = VK_NULL_HANDLE,
@@ -313,51 +333,152 @@ ui_pipeline_create(GfxContext context, GfxShader *shader)
   };
 
   if(vkCreateGraphicsPipelines
-     (context.l_dev, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &shader->pipeline) != VK_SUCCESS) {
+     (context.l_dev, VK_NULL_HANDLE, 1, &pipeline_info, NULL, pipeline) != VK_SUCCESS) {
     printf("!failed to create graphics pipeline!\n");
   }
     
   vkDestroyShaderModule(context.l_dev, frag_shader, NULL);
   vkDestroyShaderModule(context.l_dev, vert_shader, NULL);
-    
+  
   return 0;
 }
 
 
-int render_3D_text(GfxContext context, GfxFont font, char* string,
+int text_shader_create(GfxContext context, GfxShader* shader)
+{
+  ssbo_descriptors_layout(context.l_dev, &shader->descriptors_layout);
+  shader->descriptors =
+    (VkDescriptorSet*)malloc(context.frame_c * sizeof( VkDescriptorSet ));
+  ssbo_descriptors_alloc(context,
+			 shader->descriptors_layout,
+			 shader->descriptors,
+			 context.frame_c);
+  
+  VkDescriptorSetLayout descriptors_layouts[2] =
+    { context.texture_descriptors_layout, shader->descriptors_layout };
+  pipeline_layout_create(context.l_dev, descriptors_layouts,
+			 &shader->pipeline_layout);
+  text_pipeline_create(context, shader->pipeline_layout,
+			&shader->pipeline);
+
+  return 0;
+}
+int
+text_indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count)
+{
+  shader->uniform_b = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
+  
+  for(unsigned int i = 0; i < context.frame_c; i++){
+
+    GfxBuffer* b = &shader->uniform_b[i];
+    VkDeviceSize size = draw_count * sizeof(text_args);
+    
+    buffer_create(context, b,
+		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT  
+		   | VK_BUFFER_USAGE_TRANSFER_DST_BIT), // usage
+		  (VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		   | VMA_ALLOCATION_CREATE_MAPPED_BIT ), // flags
+		  size);
+		 
+    VkDescriptorBufferInfo descriptor_buffer_info = {
+      .buffer = b->handle,
+      .offset = 0,
+      .range = size,
+    };    
+    VkWriteDescriptorSet descriptor_write = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = shader->descriptors[i],
+      .dstBinding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .pBufferInfo = &descriptor_buffer_info,
+    };
+  
+    vkUpdateDescriptorSets(context.l_dev, 1, &descriptor_write, 0, NULL);
+  }
+
+  buffer_create(context, &shader->indirect_b,
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+		(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		 | VMA_ALLOCATION_CREATE_MAPPED_BIT ),
+		draw_count * sizeof(VkDrawIndexedIndirectCommand));
+
+  return 0;
+}
+
+int
+text_load(GfxContext context,
+	      GfxStagingText staging,
+	      GfxBuffer* g, GfxModelOffsets* model){
+
+  VmaAllocationInfo g_vertices_info;
+  vmaGetAllocationInfo(context.allocator, g->allocation, &g_vertices_info);
+  GfxBuffer* g_indices = (GfxBuffer*)g_vertices_info.pUserData;
+  VmaAllocationInfo g_indices_info;
+  vmaGetAllocationInfo(context.allocator, g_indices->allocation, &g_indices_info);
+  
+  size_t vb_size = staging.vertex_c * sizeof(vertex2);
+  if(g_vertices_info.size < g->used_size + vb_size )return 1;
+  
+  size_t ib_size = staging.index_c * sizeof(uint32_t);
+  if(g_indices_info.size < g_indices->used_size + ib_size )return 1;
+  
+  // we need to give offsets before we append to the geometry buffer
+  model->firstIndex = g_indices->used_size / sizeof(uint32_t);
+  model->indexCount = staging.index_c;
+  model->vertexOffset = g->used_size / sizeof(vertex2);
+  model->textureIndex = 0;
+
+  int err;
+  err = vmaCopyMemoryToAllocation(context.allocator, staging.vertices,
+			    g->allocation, g->used_size, vb_size);
+  g->used_size += vb_size;
+  
+  err = vmaCopyMemoryToAllocation(context.allocator, staging.indices,
+				  g_indices->allocation, g_indices->used_size,
+				  ib_size);
+  g_indices->used_size += ib_size;
+  
+  return err;
+}
+
+int text_render(GfxContext context, GfxFont font, char* string,
 		GfxBuffer* dest, GfxModelOffsets* model){
   if(FONT_LOADED == 0)return 1;
 
-  float ratio = (float)font.glyph_width / (float)font.height;
-  printf("%f\n", ratio);
+  float aspect = ((float)font.glyph_width / (float)font.height);
+  float pos_stride_x = (float)font.glyph_width / context.extent.width * 4;
+  float pos_stride_y = pos_stride_x / aspect;
+  printf("pos_strides x%f y %f\n", pos_stride_x, pos_stride_y);
+  
+  float uv_stride = (float)font.glyph_width /
+    (float)(font.glyph_c * font.glyph_width);
   
   int len = strlen(string);
   char* c = string;
 
   size_t vertex_c = len * 4;
   size_t index_c = len * 6;
-  vertex3* vertices = (vertex3*)malloc(sizeof(vertex3) * vertex_c);
+  vertex2* vertices = (vertex2*)malloc(sizeof(vertex2) * vertex_c);
   uint32_t* indices = (uint32_t*)malloc(sizeof(uint32_t) * index_c);
   for(int x = 0; x < len; x++){
-    
-    int atlas_width = font.glyph_c * font.glyph_width;
-    vertex3 top_left = {
-      .pos = { (float)x * ratio, 0.0f, -1.0f },
-      .normal = { 1.0f, 1.0f, 1.0f},
-      .uv = { (float)(*c * font.glyph_width) / (float)atlas_width, 0}
+
+    vertex2 top_left = {
+      .pos = { (float)(x * pos_stride_x) - 1, -1.0f},
+      .uv = { (float)*c * uv_stride, 0}
     };
 
-    vertex3 bottom_left = top_left;
-    bottom_left.pos[2] = 0; // Z
-    bottom_left.uv[1] = 1; // Y
+    vertex2 bottom_left = top_left;
+    bottom_left.pos[1] += pos_stride_y; // Y
+    bottom_left.uv[1] += 1; // Y
     
-    vertex3 top_right = top_left;
-    top_right.pos[0] += ratio; // X
-    top_right.uv[0] += (float)font.glyph_width / (float)atlas_width; //X
+    vertex2 top_right = top_left;
+    top_right.pos[0] += pos_stride_x;
+    top_right.uv[0] += uv_stride;
 
-    vertex3 bottom_right = top_right;
-    bottom_right.pos[2] = 0; // Y
-    bottom_right.uv[1] = 1;  // Y
+    vertex2 bottom_right = top_right;
+    bottom_right.pos[1] += pos_stride_y; // Y
+    bottom_right.uv[1] += 1.0f;  // Y
 
     int TL = x * 4;
     int TR = x * 4 +1;
@@ -380,18 +501,53 @@ int render_3D_text(GfxContext context, GfxFont font, char* string,
     c++;
   }
 
-  GfxStagingMesh staging = {
+  GfxStagingText staging = {
     .vertices = vertices,
     .vertex_c = vertex_c,
     .indices = indices,
     .index_c = index_c,
   };
-  geometry_load(context, staging, dest, model);
+  text_load(context, staging, dest, model);
   
   free(vertices);
   free(indices);
 
   return 0;
+}
+
+
+void text_draw(GfxContext context, GfxShader shader,
+	       text_entity* entities, int count){
+  VmaAllocationInfo indirect;
+  vmaGetAllocationInfo(context.allocator,
+		       shader.indirect_b.allocation,
+		       &indirect);
+  
+  VmaAllocationInfo indirect_args;
+  vmaGetAllocationInfo(context.allocator,
+		       shader.uniform_b[context.current_frame_index].allocation,
+		       &indirect_args);
+  
+  for(int i = 0; i < count; i++){
+    text_entity* entity = &entities[i];
+    // INDIRECT ARGS BUFFER
+    text_args *args_ptr = (text_args*)indirect_args.pMappedData + i;
+    args_ptr->texture_i = entity->model.textureIndex;
+
+    glm_mat4_identity(args_ptr->view_m);
+    
+    // INDIRECT BUFFER
+    VkDrawIndexedIndirectCommand* indirect_ptr =
+      (VkDrawIndexedIndirectCommand*)indirect.pMappedData + i;
+    indirect_ptr->indexCount = entity->model.indexCount;
+    indirect_ptr->instanceCount = 1;
+    indirect_ptr->firstIndex = entity->model.firstIndex;
+    indirect_ptr->vertexOffset = entity->model.vertexOffset;
+    indirect_ptr->firstInstance = i;
+  }
+
+  vkCmdDrawIndexedIndirect(context.command_buffer, shader.indirect_b.handle, 0,
+			   count, sizeof(VkDrawIndexedIndirectCommand));
 }
 
 int font_free(GfxFont* font){

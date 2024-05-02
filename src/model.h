@@ -10,7 +10,7 @@ typedef struct {
   uint32_t index_c;
 } GfxStagingMesh;
 
-int entity_gltf_load(GfxContext, const char*, GfxModelOffsets*, GfxBuffer*);
+int gltf_load(GfxContext, const char*, GfxModelOffsets*, GfxBuffer*);
 int geometry_init(GfxContext, GfxBuffer*, size_t);
 int geometry_load(GfxContext context,
 		  GfxStagingMesh,

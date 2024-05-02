@@ -15,7 +15,28 @@ typedef struct{
   vec2 uv;
 } vertex2;
 
-int gfx_font_create(GfxContext, char*, GfxFont*);
-int font_free(GfxFont* font);
-int render_3D_text(GfxContext context, GfxFont font, char* string,
+typedef struct {
+  vertex2* vertices;
+  uint32_t vertex_c;
+  uint32_t* indices;
+  uint32_t index_c;
+} GfxStagingText;
+
+typedef struct{
+  mat4 view_m;
+  uint32_t texture_i;
+} text_args;
+
+typedef struct {
+  vec2 pos;
+  GfxModelOffsets model;
+} text_entity;
+
+int gfx_font_load(GfxContext context, GfxFont* font, char* filename);
+int text_shader_create(GfxContext context, GfxShader* shader);
+int text_indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count);
+int text_render(GfxContext context, GfxFont font, char* string,
 		   GfxBuffer* dest, GfxModelOffsets* model);
+void text_draw(GfxContext context, GfxShader shader,
+	       text_entity* entities, int count);
+int font_free(GfxFont* font);

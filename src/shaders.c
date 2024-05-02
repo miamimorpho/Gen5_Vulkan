@@ -82,28 +82,6 @@ pipeline_layout_create(VkDevice l_dev,
   return 0;
 }
 
-int
-shader_timers_create(GfxContext context, GfxShader* shader)
-{
-  VkSemaphoreCreateInfo semaphore_info = {
-    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-  };
-
-  VkFenceCreateInfo fence_info = {
-    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-  };
-  
-  if(vkCreateSemaphore(context.l_dev, &semaphore_info,
-		       NULL, &shader->render_finished) != VK_SUCCESS ||
-     vkCreateFence(context.l_dev, &fence_info,
-		   NULL, &shader->in_flight) != VK_SUCCESS ){
-    printf("!failed to create sync objects!\n");
-    return 1;
-  }
-
-  return 0;
-}
 
 int model_pipeline_create(GfxContext context,
 		      VkPipelineLayout pipeline_layout,
@@ -294,7 +272,7 @@ int model_pipeline_create(GfxContext context,
 }
 
 
-int ps1_pipeline_create(GfxContext context, GfxShader* shader)
+int model_shader_create(GfxContext context, GfxShader* shader)
 {
   ssbo_descriptors_layout(context.l_dev, &shader->descriptors_layout);
   shader->descriptors =
@@ -311,8 +289,6 @@ int ps1_pipeline_create(GfxContext context, GfxShader* shader)
   model_pipeline_create(context, shader->pipeline_layout,
 			&shader->pipeline);
 
-  shader_timers_create(context, shader);
-  
   return 0;
 }
     
@@ -342,13 +318,19 @@ int pipeline_bind(GfxContext context, GfxShader shader){
 int
 pipeline_destroy(GfxContext context, GfxShader shader)
 {
-  vkDestroySemaphore(context.l_dev, context.image_available, NULL);
-  printf("render finsihed!\n");
 
-  vkDestroySemaphore(context.l_dev, shader.render_finished, NULL);
+
+  free(shader.descriptors);
+
+  buffer_destroy(context,
+		 shader.uniform_b,
+		 context.frame_c);
+
+  free(shader.uniform_b);
   
-  vkDestroyFence(context.l_dev, shader.in_flight, NULL);
-
+  buffer_destroy(context,
+		 &shader.indirect_b, 1);
+ 
   vkDestroyPipeline(context.l_dev, shader.pipeline, NULL);
   vkDestroyPipelineLayout(context.l_dev, shader.pipeline_layout, NULL); 
   vkDestroyDescriptorSetLayout(context.l_dev, shader.descriptors_layout, NULL); 
