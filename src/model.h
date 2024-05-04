@@ -11,10 +11,8 @@ typedef struct {
 } GfxStagingMesh;
 
 int gltf_load(GfxContext, const char*, GfxModelOffsets*, GfxBuffer*);
-int geometry_init(GfxContext, GfxBuffer*, size_t);
-int geometry_load(GfxContext context,
-		  GfxStagingMesh,
-		  GfxBuffer* dest, GfxModelOffsets* model);
-int geometry_bind(GfxContext, GfxBuffer);
+int mesh_b_create(GfxContext, GfxBuffer*, size_t);
+int mesh_b_load(GfxContext, GfxStagingMesh, GfxBuffer*, GfxModelOffsets*);
+int mesh_b_bind(GfxContext, GfxBuffer);
 
 #endif /*MODEL_H*/

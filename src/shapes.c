@@ -43,7 +43,7 @@ vertex3 vertices[24] = {
    .index_c = sizeof(indices)/sizeof(uint32_t),
  };
    
- geometry_load(context, staging, dest, model);
+ mesh_b_load(context, staging, dest, model);
 
  return 0;
 }
@@ -127,7 +127,7 @@ int make_plane(GfxContext context, int width, int height, GfxBuffer* geometry,
     .index_c = index_c,
   };
   
-  geometry_load(context, staging, geometry, model);
+  mesh_b_load(context, staging, geometry, model);
 
   free(vertices);
   free(indices);

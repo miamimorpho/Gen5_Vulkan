@@ -108,13 +108,13 @@ int buffer_create(GfxContext context, GfxBuffer* buffer,
 		  VkBufferUsageFlags usage,
 		  VmaAllocatorCreateFlags flags,
 		  VkDeviceSize size);
-int buffer_append(const void*, GfxBuffer*, size_t);
+int buffer_append(GfxContext context, GfxBuffer *dest,
+		  const void* src, VkDeviceSize src_size);
+GfxBuffer* buffer_next(GfxContext, GfxBuffer);
 int  buffer_destroy(GfxContext, GfxBuffer*, int);
 
 void image_destroy(GfxContext, GfxImage);
-
-int
-image_create(GfxContext context,
+int image_create(GfxContext context,
 	     VkImage *image, VmaAllocation *image_alloc,
 	     VkImageUsageFlags usage, VkFormat format,
 	     uint32_t width, uint32_t height);

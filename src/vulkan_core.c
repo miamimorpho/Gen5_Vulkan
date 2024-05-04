@@ -9,7 +9,7 @@ const int HEIGHT = 480;
 const char *cfg_device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, };
 /* Debug/Validation Layers */
 const int enable_debug = 1;
-const char *cfg_validation_layers[] = { "VK_LAYER_KHRONOS_validation", };
+const char *cfg_validation_layers[] = { "VK_LAYER_KHRONOS_validation"};
 const VkFormat cfg_format = VK_FORMAT_B8G8R8A8_SRGB;
 
 /* START OF CODE */
@@ -322,39 +322,6 @@ int allocator_create(GfxContext context, VmaAllocator* allocator){
   return 0;
 }
 
-/* Returns size of *validation_layers[]
- * will return 0 unless every requested layer is available
- * REQUIRED FOR BOOT
- */
-int
-debug_layer_count(void)
-{
-  uint32_t avail_layer_c;
-  vkEnumerateInstanceLayerProperties(&avail_layer_c, NULL);
-  VkLayerProperties avail_layers[avail_layer_c];
-  vkEnumerateInstanceLayerProperties(&avail_layer_c, avail_layers);
-
-  int valid_layer_c = sizeof(cfg_validation_layers) / sizeof(cfg_validation_layers[0]);
-  int layer_found;
-
-  printf("validation_layers [ ");
-  for (int i = 0; i < valid_layer_c; i++){
-    layer_found = 0;
-    for(uint32_t a = 0; a < avail_layer_c; a++){
-      if(strcmp(cfg_validation_layers[i], avail_layers[a].layerName) == 0){
-	printf("%s, ", avail_layers[a].layerName);
-	layer_found = 1;
-      }
-    }
-    if(!layer_found){
-      printf("%s[error]", cfg_validation_layers[i]);
-      return 0;
-    }
-  }
-  printf("]\n");
-  return valid_layer_c;
-}
-
 /**
  * checks required GFLW extensions are available
  * loads in validation layers if compiled with debug_enabled
@@ -394,8 +361,8 @@ instance_create()
     ext_found = 0;
     for (uint32_t i = 0; i < vk_ext_c; i++){
       if (strcmp(ext[g], vk_ext[i].extensionName) == 0){
-	ext_found = 1;
 	printf("[X]\t%s\n", vk_ext[i].extensionName);
+	ext_found = 1;
       }
     }
     if(!ext_found){
@@ -414,7 +381,18 @@ instance_create()
 
   /* Enable validation_layers debugging */
   if(enable_debug){
-    create_info.enabledLayerCount = debug_layer_count();
+    uint32_t debug_layer_c;
+    vkEnumerateInstanceLayerProperties(&debug_layer_c, NULL);
+    VkLayerProperties debug_layers[debug_layer_c];
+    vkEnumerateInstanceLayerProperties(&debug_layer_c, debug_layers);
+    printf("/** DEBUG ENABLED **/");
+    const char* debug_layer_names[debug_layer_c];
+    for(uint32_t a = 0; a < debug_layer_c; a++){
+      debug_layer_names[a] = debug_layers[a].layerName;
+      printf("%s, ", debug_layer_names[a]);
+    }
+    printf("\n");
+    create_info.enabledLayerCount = 1;
     create_info.ppEnabledLayerNames = cfg_validation_layers;
   }
     

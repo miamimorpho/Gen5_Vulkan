@@ -311,7 +311,13 @@ int pipeline_bind(GfxContext context, GfxShader shader){
   vkCmdSetScissor(context.command_buffer, 0, 1, &scissor);
   vkCmdBindPipeline(context.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	            shader.pipeline);
-	
+
+  /* Bind Descriptors */
+  vkCmdBindDescriptorSets(context.command_buffer, 
+			  VK_PIPELINE_BIND_POINT_GRAPHICS,
+			  shader.pipeline_layout, 0, 1,
+			  &context.texture_descriptors, 0, NULL);
+
   return 0;
 }
 

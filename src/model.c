@@ -5,7 +5,7 @@
 #include "../extern/cgltf.h"
 
 int
-geometry_init(GfxContext context, GfxBuffer* geometry,
+mesh_b_create(GfxContext context, GfxBuffer* geometry,
 		       size_t estimated_size)
 {
   int err;
@@ -32,7 +32,7 @@ geometry_init(GfxContext context, GfxBuffer* geometry,
 }
 
 int
-geometry_load(GfxContext context,
+mesh_b_load(GfxContext context,
 	      GfxStagingMesh staging,
 	      GfxBuffer* g, GfxModelOffsets* model){
 
@@ -67,7 +67,7 @@ geometry_load(GfxContext context,
   return err;
 }
 
-int geometry_bind(GfxContext context, GfxBuffer g){
+int mesh_b_bind(GfxContext context, GfxBuffer g){
 
   VmaAllocationInfo g_vertices_info;
   vmaGetAllocationInfo(context.allocator, g.allocation, &g_vertices_info);
@@ -217,28 +217,28 @@ gltf_mesh_load(cgltf_data* data, GfxStagingMesh* m)
  * through the functions 'gltf_mesh_load' and 'gltf_skin_load'
  */
 int gltf_load(GfxContext context, const char* filename,
-		     GfxModelOffsets *model, GfxBuffer *geometry){ 
-  cgltf_data* data;
+		     GfxModelOffsets *model, GfxBuffer *mesh_b){ 
+  cgltf_data* raw_data;
   cgltf_options options = {0};
 
-  if(cgltf_parse_file(&options, filename, &data)
+  if(cgltf_parse_file(&options, filename, &raw_data)
      != cgltf_result_success){
     printf("file missing!\n");
     return 1;
   }
-  if(cgltf_load_buffers(&options, data, filename)
+  if(cgltf_load_buffers(&options, raw_data, filename)
      != cgltf_result_success) return 1;
-  if(cgltf_validate(data)
+  if(cgltf_validate(raw_data)
      != cgltf_result_success) return 1;
 
   GfxStagingMesh mesh;
-  if(gltf_mesh_load(data, &mesh)) return 2;
+  if(gltf_mesh_load(raw_data, &mesh)) return 2;
 
-  geometry_load(context, mesh, geometry, model);
+  mesh_b_load(context, mesh, mesh_b, model);
   
-  gltf_skin_load(context, data, &model->textureIndex);
+  gltf_skin_load(context, raw_data, &model->textureIndex);
 
-  cgltf_free(data);
+  cgltf_free(raw_data);
   
   return 0;
 }

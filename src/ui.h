@@ -36,7 +36,7 @@ int gfx_font_load(GfxContext context, GfxFont* font, char* filename);
 int text_shader_create(GfxContext context, GfxShader* shader);
 int text_indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count);
 int text_render(GfxContext context, GfxFont font, char* string,
-		   GfxBuffer* dest, GfxModelOffsets* model);
+		   GfxBuffer* dest);
 void text_draw(GfxContext context, GfxShader shader,
 	       text_entity* entities, int count);
 int font_free(GfxFont* font);

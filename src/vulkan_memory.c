@@ -61,6 +61,32 @@ buffer_create(GfxContext context, GfxBuffer* buffer,
   return 0;
 }
 
+int buffer_append(GfxContext context, GfxBuffer *dest,
+		  const void* src, VkDeviceSize src_size)
+{
+  VmaAllocationInfo dest_info;
+  vmaGetAllocationInfo(context.allocator, dest->allocation, &dest_info);
+  
+  if(dest->used_size + src_size > dest_info.size)
+    return 1;
+  
+  vmaCopyMemoryToAllocation(context.allocator, src,
+			    dest->allocation, dest->used_size,
+			    src_size);
+  dest->used_size += src_size;
+  return 0;
+}
+
+GfxBuffer* buffer_next(GfxContext context, GfxBuffer first)
+{
+  VmaAllocationInfo first_info;
+  vmaGetAllocationInfo(context.allocator, first.allocation,
+		       &first_info);
+  
+  GfxBuffer* second = (GfxBuffer*)first_info.pUserData;
+  return second;
+}
+
 void
 image_destroy(GfxContext context, GfxImage image)
 {

@@ -94,10 +94,7 @@ int textures_init(GfxContext* context)
 int textures_get_slot()
 {
   for(uint32_t i = 0; i < MAX_SAMPLERS; i++){
-    if(g_texture_array[i].handle == VK_NULL_HANDLE){
-      printf("texture slot: [%d]\n", i);
-      return i;
-    }
+    if(g_texture_array[i].handle == VK_NULL_HANDLE)return i;
   }
   return MAX_SAMPLERS;
 }
@@ -105,8 +102,6 @@ int textures_get_slot()
 int
 texture_load(GfxContext context, unsigned char* pixels,
 	     int width, int height, int channels, uint32_t* index){
-
-  printf("TEXTURE LOAD()\n");
   
   *index = textures_get_slot();
   GfxImage* texture = &g_texture_array[*index];
@@ -128,10 +123,10 @@ texture_load(GfxContext context, unsigned char* pixels,
   
   VkDeviceSize image_size = width * height * channels;
   GfxBuffer image_b;
-  if(buffer_create(context, &image_b,
-		   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		   image_size) == 1)printf("fuck\n");
+  buffer_create(context, &image_b,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		image_size);
   
   
   /* copy pixel data to buffer */
@@ -174,7 +169,6 @@ int texture_file_load(GfxContext context, const char* filename, uint32_t* index)
 {
   int x, y, n;
   stbi_info(filename, &x, &y, &n);
-  printf("channels: %d\n", n);
   unsigned char* pixels = stbi_load(filename, &x, &y, &n, n);
   if(pixels == NULL){
     printf("stbi_load() fail\n");
@@ -188,12 +182,10 @@ int texture_file_load(GfxContext context, const char* filename, uint32_t* index)
 int texture_memory_load(GfxContext context, uint8_t* raw_pixels, size_t size,
 			uint32_t* index)
 {
-  printf("TEXTURE_MEMORY_LOAD\n");
   
   int width, height, channels;
   stbi_info_from_memory(raw_pixels, size,
 			&width, &height, &channels);
-  printf("stbi_info %d %d %d\n", width, height, channels);
   /* interpret view file */
   unsigned char* pixels = stbi_load_from_memory
     ((stbi_uc*)raw_pixels, size,
@@ -215,7 +207,6 @@ texture_descriptors_update(GfxContext context, uint32_t count)
 
   for(uint32_t i = 0; i < count; i++){
 
-    printf("textures %d/%d\n", i, count);
     if(g_texture_array[i].handle == VK_NULL_HANDLE)printf("texture loading error\n");
 
     infos[i] = (VkDescriptorImageInfo){

@@ -12,7 +12,6 @@ int bdf_load(GfxFont* font, char* filename){
 
   const int L_LEN = 80;
   const int W_LEN = 8;
-  printf("BDF_LOAD\n");
   
   FILE *fp = fopen(filename, "r");
   if(fp == NULL) {
@@ -52,7 +51,7 @@ int bdf_load(GfxFont* font, char* filename){
       char encoding[W_LEN]; 
       
       sscanf(line, "%*s %s", encoding);
-      if(strcmp(encoding, "\"437\"") == 0 )printf("Supported Encoding!\n");
+      if(strcmp(encoding, "\"437\"") != 0 )printf("unsupported font format");
 
       supported += 1;
       continue;
@@ -74,7 +73,7 @@ int bdf_load(GfxFont* font, char* filename){
     printf("not enough config information\n");
     return 2;
   }/* META LOADING END */
-  printf("font supported\n");
+
   
   int image_size = font->glyph_width
     * font->glyph_c
@@ -214,12 +213,12 @@ int text_pipeline_create(GfxContext context,
   VkVertexInputAttributeDescription attribute_descriptions[2];
   attribute_descriptions[0].binding = 0;
   attribute_descriptions[0].location = 0;
-  attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+  attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT; // 2 double
   attribute_descriptions[0].offset = offsetof(vertex2, pos);
 
   attribute_descriptions[1].binding = 0;
   attribute_descriptions[1].location = 1;
-  attribute_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+  attribute_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT; // 2 float
   attribute_descriptions[1].offset = offsetof(vertex2, uv);
   
   VkVertexInputBindingDescription binding_description = {
@@ -346,128 +345,60 @@ int text_pipeline_create(GfxContext context,
 
 int text_shader_create(GfxContext context, GfxShader* shader)
 {
-  ssbo_descriptors_layout(context.l_dev, &shader->descriptors_layout);
-  shader->descriptors =
-    (VkDescriptorSet*)malloc(context.frame_c * sizeof( VkDescriptorSet ));
-  ssbo_descriptors_alloc(context,
-			 shader->descriptors_layout,
-			 shader->descriptors,
-			 context.frame_c);
   
-  VkDescriptorSetLayout descriptors_layouts[2] =
-    { context.texture_descriptors_layout, shader->descriptors_layout };
-  pipeline_layout_create(context.l_dev, descriptors_layouts,
-			 &shader->pipeline_layout);
+  VkPipelineLayoutCreateInfo pipeline_layout_info = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    .setLayoutCount = 1,
+    .pSetLayouts = &context.texture_descriptors_layout,
+  };
+
+  if(vkCreatePipelineLayout(context.l_dev, &pipeline_layout_info,
+			    NULL, &shader->pipeline_layout)
+       != VK_SUCCESS)
+    {
+      printf("!failed to create pipeline layout!\n");
+      return 1;
+    }
+  
   text_pipeline_create(context, shader->pipeline_layout,
-			&shader->pipeline);
+		       &shader->pipeline);
 
   return 0;
-}
-int
-text_indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count)
-{
-  shader->uniform_b = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
-  
-  for(unsigned int i = 0; i < context.frame_c; i++){
-
-    GfxBuffer* b = &shader->uniform_b[i];
-    VkDeviceSize size = draw_count * sizeof(text_args);
-    
-    buffer_create(context, b,
-		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT  
-		   | VK_BUFFER_USAGE_TRANSFER_DST_BIT), // usage
-		  (VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-		   | VMA_ALLOCATION_CREATE_MAPPED_BIT ), // flags
-		  size);
-		 
-    VkDescriptorBufferInfo descriptor_buffer_info = {
-      .buffer = b->handle,
-      .offset = 0,
-      .range = size,
-    };    
-    VkWriteDescriptorSet descriptor_write = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = shader->descriptors[i],
-      .dstBinding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .pBufferInfo = &descriptor_buffer_info,
-    };
-  
-    vkUpdateDescriptorSets(context.l_dev, 1, &descriptor_write, 0, NULL);
-  }
-
-  buffer_create(context, &shader->indirect_b,
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-		(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-		 | VMA_ALLOCATION_CREATE_MAPPED_BIT ),
-		draw_count * sizeof(VkDrawIndexedIndirectCommand));
-
-  return 0;
-}
-
-int
-text_load(GfxContext context,
-	      GfxStagingText staging,
-	      GfxBuffer* g, GfxModelOffsets* model){
-
-  VmaAllocationInfo g_vertices_info;
-  vmaGetAllocationInfo(context.allocator, g->allocation, &g_vertices_info);
-  GfxBuffer* g_indices = (GfxBuffer*)g_vertices_info.pUserData;
-  VmaAllocationInfo g_indices_info;
-  vmaGetAllocationInfo(context.allocator, g_indices->allocation, &g_indices_info);
-  
-  size_t vb_size = staging.vertex_c * sizeof(vertex2);
-  if(g_vertices_info.size < g->used_size + vb_size )return 1;
-  
-  size_t ib_size = staging.index_c * sizeof(uint32_t);
-  if(g_indices_info.size < g_indices->used_size + ib_size )return 1;
-  
-  // we need to give offsets before we append to the geometry buffer
-  model->firstIndex = g_indices->used_size / sizeof(uint32_t);
-  model->indexCount = staging.index_c;
-  model->vertexOffset = g->used_size / sizeof(vertex2);
-  model->textureIndex = 0;
-
-  int err;
-  err = vmaCopyMemoryToAllocation(context.allocator, staging.vertices,
-			    g->allocation, g->used_size, vb_size);
-  g->used_size += vb_size;
-  
-  err = vmaCopyMemoryToAllocation(context.allocator, staging.indices,
-				  g_indices->allocation, g_indices->used_size,
-				  ib_size);
-  g_indices->used_size += ib_size;
-  
-  return err;
 }
 
 int text_render(GfxContext context, GfxFont font, char* string,
-		GfxBuffer* dest, GfxModelOffsets* model){
+			    GfxBuffer* dest)
+{
   if(FONT_LOADED == 0)return 1;
 
-  float aspect = ((float)font.glyph_width / (float)font.height);
-  float pos_stride_x = (float)font.glyph_width / context.extent.width * 4;
-  float pos_stride_y = pos_stride_x / aspect;
-  printf("pos_strides x%f y %f\n", pos_stride_x, pos_stride_y);
+  double aspect = (double)font.glyph_width / (double)font.height;
+  double pos_stride_x = (double)font.glyph_width / (double)context.extent.width *4;
+  double pos_stride_y = pos_stride_x / aspect;
   
   float uv_stride = (float)font.glyph_width /
     (float)(font.glyph_c * font.glyph_width);
   
   int len = strlen(string);
-  char* c = string;
-
   size_t vertex_c = len * 4;
+  vertex2 vertices[vertex_c];
   size_t index_c = len * 6;
-  vertex2* vertices = (vertex2*)malloc(sizeof(vertex2) * vertex_c);
-  uint32_t* indices = (uint32_t*)malloc(sizeof(uint32_t) * index_c);
+  uint32_t indices[index_c];
+  
+  float cursor_x = -1;
+  float cursor_y = -1;
+
+  char* c = string; 
+ 
+ 
+  /* START OF COMPOSITING LOOP */
   for(int x = 0; x < len; x++){
 
     vertex2 top_left = {
-      .pos = { (float)(x * pos_stride_x) - 1, -1.0f},
+      .pos = { (float)cursor_x, cursor_y},
       .uv = { (float)*c * uv_stride, 0}
     };
-
+    cursor_x += pos_stride_x;
+    
     vertex2 bottom_left = top_left;
     bottom_left.pos[1] += pos_stride_y; // Y
     bottom_left.uv[1] += 1; // Y
@@ -499,58 +430,12 @@ int text_render(GfxContext context, GfxFont font, char* string,
     indices[x * 6 +5] = BR;
     
     c++;
-  }
+  }/* END OF COMPOSITING LOOP */
 
-  GfxStagingText staging = {
-    .vertices = vertices,
-    .vertex_c = vertex_c,
-    .indices = indices,
-    .index_c = index_c,
-  };
-  text_load(context, staging, dest, model);
+  buffer_append(context, dest, vertices, vertex_c * sizeof(vertex2));
   
-  free(vertices);
-  free(indices);
+  GfxBuffer* dest_indices = buffer_next(context, *dest);
+  buffer_append(context, dest_indices, indices, index_c * sizeof(uint32_t));
 
-  return 0;
-}
-
-
-void text_draw(GfxContext context, GfxShader shader,
-	       text_entity* entities, int count){
-  VmaAllocationInfo indirect;
-  vmaGetAllocationInfo(context.allocator,
-		       shader.indirect_b.allocation,
-		       &indirect);
-  
-  VmaAllocationInfo indirect_args;
-  vmaGetAllocationInfo(context.allocator,
-		       shader.uniform_b[context.current_frame_index].allocation,
-		       &indirect_args);
-  
-  for(int i = 0; i < count; i++){
-    text_entity* entity = &entities[i];
-    // INDIRECT ARGS BUFFER
-    text_args *args_ptr = (text_args*)indirect_args.pMappedData + i;
-    args_ptr->texture_i = entity->model.textureIndex;
-
-    glm_mat4_identity(args_ptr->view_m);
-    
-    // INDIRECT BUFFER
-    VkDrawIndexedIndirectCommand* indirect_ptr =
-      (VkDrawIndexedIndirectCommand*)indirect.pMappedData + i;
-    indirect_ptr->indexCount = entity->model.indexCount;
-    indirect_ptr->instanceCount = 1;
-    indirect_ptr->firstIndex = entity->model.firstIndex;
-    indirect_ptr->vertexOffset = entity->model.vertexOffset;
-    indirect_ptr->firstInstance = i;
-  }
-
-  vkCmdDrawIndexedIndirect(context.command_buffer, shader.indirect_b.handle, 0,
-			   count, sizeof(VkDrawIndexedIndirectCommand));
-}
-
-int font_free(GfxFont* font){
-  free(font->pixels);
-  return 0;
+  return index_c;
 }
