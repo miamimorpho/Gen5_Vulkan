@@ -1,14 +1,17 @@
 #include "vulkan_util.h"
-#include "ui.h"
-#include "model.h"
+#include "gui.h"
 #include "textures.h"
+#include "destroyer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static int FONT_LOADED = 0;
 
-int bdf_load(GfxFont* font, char* filename){
+static VkPipelineLayout g_pipeline_layout;
+static VkPipeline g_pipeline;
+
+int bdf_load(GfxFont* font, uint8_t* pixels, size_t* size, char* filename){
 
   const int L_LEN = 80;
   const int W_LEN = 8;
@@ -74,12 +77,12 @@ int bdf_load(GfxFont* font, char* filename){
     return 2;
   }/* META LOADING END */
 
+  if(*size <= 0){
+    *size = font->glyph_width * font->glyph_c * font->height;
+    return 0;
+  }
   
-  int image_size = font->glyph_width
-    * font->glyph_c
-    * font->height;
-  font->pixels = (uint8_t*)malloc(image_size);
-  memset(font->pixels, 255, image_size);
+  memset(pixels, 255, *size);
   
   rewind(fp);
   int in_bytes = 0;
@@ -117,7 +120,7 @@ int bdf_load(GfxFont* font, char* filename){
 	int pixel_xy = y + (code_i * font->glyph_width) + i;
 	uint8_t pixel = 0;
 	if((row >> (7 - i) ) & 0x01)pixel = 255;	
-	font->pixels[pixel_xy] = pixel;
+	pixels[pixel_xy] = pixel;
       }
    
       continue;
@@ -145,12 +148,15 @@ int bdf_load(GfxFont* font, char* filename){
 
 int gfx_font_load(GfxContext context, GfxFont* font, char* filename){
   int err;
-  
-  err = bdf_load(font, filename);
 
+  size_t size = 0;
+  err = bdf_load(font, NULL, &size, filename);
+  uint8_t pixels[size];
+  err = bdf_load(font, pixels, &size, filename);
+  
   int width = font->glyph_width * font->glyph_c;
   
-  err = texture_load(context, font->pixels, width, font->height, 1,
+  err = texture_load(context, pixels, width, font->height, 1,
 		     &font->texture_index);
 
   FONT_LOADED = 1;
@@ -159,7 +165,7 @@ int gfx_font_load(GfxContext context, GfxFont* font, char* filename){
 }
 
 
-int text_pipeline_create(GfxContext context,
+int gui_pipeline_create(GfxContext context,
 		      VkPipelineLayout pipeline_layout,
 		      VkPipeline* pipeline)
 {
@@ -342,10 +348,8 @@ int text_pipeline_create(GfxContext context,
   return 0;
 }
 
-
-int text_shader_create(GfxContext context, GfxShader* shader)
+int gui_shader_create(GfxContext context)
 {
-  
   VkPipelineLayoutCreateInfo pipeline_layout_info = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     .setLayoutCount = 1,
@@ -353,15 +357,17 @@ int text_shader_create(GfxContext context, GfxShader* shader)
   };
 
   if(vkCreatePipelineLayout(context.l_dev, &pipeline_layout_info,
-			    NULL, &shader->pipeline_layout)
+			    NULL, &g_pipeline_layout)
        != VK_SUCCESS)
     {
       printf("!failed to create pipeline layout!\n");
       return 1;
     }
+  deferd_add( deferd_VkPipelineLayout, &g_pipeline_layout);
   
-  text_pipeline_create(context, shader->pipeline_layout,
-		       &shader->pipeline);
+  gui_pipeline_create(context, g_pipeline_layout,
+		       &g_pipeline);
+  deferd_add( deferd_VkPipeline, &g_pipeline);
 
   return 0;
 }
@@ -438,4 +444,27 @@ int text_render(GfxContext context, GfxFont font, char* string,
   buffer_append(context, dest_indices, indices, index_c * sizeof(uint32_t));
 
   return index_c;
+}
+
+int gui_shader_bind(GfxContext context){
+  VkViewport viewport = {
+    .x = 0.0f,
+    .y = 0.0f,
+    .width = context.extent.width,
+    .height = context.extent.height,
+    .minDepth = 0.0f,
+    .maxDepth = 1.0f,
+  };
+  vkCmdSetViewport(context.command_buffer, 0, 1, &viewport);
+
+  VkRect2D scissor = {
+    .offset = {0, 0},
+    .extent = context.extent,
+  };
+    
+  vkCmdSetScissor(context.command_buffer, 0, 1, &scissor);
+  vkCmdBindPipeline(context.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+	            g_pipeline);
+
+  return 0;
 }

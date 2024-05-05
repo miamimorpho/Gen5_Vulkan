@@ -3,17 +3,6 @@
 
 #include <SDL2/SDL.h>
 
-typedef struct {
-  vec3 pos;
-
-  vec3 up;
-  vec3 front;
-  vec3 right;
-  
-  mat4 projection;
-} Camera;
-
-
 int main_input(GfxContext, Camera*);
 
 /* Camera Commands camera.c */

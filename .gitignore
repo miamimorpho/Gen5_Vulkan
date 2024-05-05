@@ -5,4 +5,5 @@ extern/*.o
 spare_parts/
 xsolid
 *~
+src/*~
 notes

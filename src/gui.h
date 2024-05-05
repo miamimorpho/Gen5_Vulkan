@@ -6,7 +6,7 @@ typedef struct{
   uint32_t glyph_c;
   uint32_t glyph_width;
   uint32_t height;
-  uint8_t* pixels;
+  //uint8_t* pixels;
   uint32_t texture_index;
 } GfxFont;
 
@@ -22,21 +22,16 @@ typedef struct {
   uint32_t index_c;
 } GfxStagingText;
 
-typedef struct{
-  mat4 view_m;
-  uint32_t texture_i;
-} text_args;
-
 typedef struct {
   vec2 pos;
   GfxModelOffsets model;
 } text_entity;
 
 int gfx_font_load(GfxContext context, GfxFont* font, char* filename);
-int text_shader_create(GfxContext context, GfxShader* shader);
-int text_indirect_b_create(GfxContext context, GfxShader* shader, size_t draw_count);
+int gui_shader_create(GfxContext context);
+int gui_shader_bind(GfxContext context);
+
 int text_render(GfxContext context, GfxFont font, char* string,
 		   GfxBuffer* dest);
-void text_draw(GfxContext context, GfxShader shader,
-	       text_entity* entities, int count);
+
 int font_free(GfxFont* font);

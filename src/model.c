@@ -1,4 +1,5 @@
 #include "model.h"
+#include "destroyer.h"
 #include "textures.h"
 
 #define CGLTF_IMPLEMENTATION
@@ -15,19 +16,20 @@ mesh_b_create(GfxContext context, GfxBuffer* geometry,
 		      VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 		      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		      estimated_size * sizeof(uint32_t) * 2 );
-  vmaSetAllocationName(context.allocator, geometry_indices->allocation,
-		       "geometry index buffer\n");
+  //vmaSetAllocationName(context.allocator, geometry_indices->allocation,
+  //		       "geometry index buffer\n");
 
   
   err = buffer_create(context, geometry,
 		      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 		      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		      estimated_size * sizeof(vertex3));
-  vmaSetAllocationName(context.allocator, geometry->allocation,
-		       "geometry vertex buffer\n");
+  //vmaSetAllocationName(context.allocator, geometry->allocation,
+  //		       "geometry vertex buffer\n");
   vmaSetAllocationUserData(context.allocator, geometry->allocation,
 			   geometry_indices);
 
+  deferd_add( deferd_buffer, geometry);
   return err;
 }
 
@@ -217,7 +219,7 @@ gltf_mesh_load(cgltf_data* data, GfxStagingMesh* m)
  * through the functions 'gltf_mesh_load' and 'gltf_skin_load'
  */
 int gltf_load(GfxContext context, const char* filename,
-		     GfxModelOffsets *model, GfxBuffer *mesh_b){ 
+	      GfxModelOffsets *model, GfxBuffer *mesh_b){ 
   cgltf_data* raw_data;
   cgltf_options options = {0};
 
@@ -235,10 +237,13 @@ int gltf_load(GfxContext context, const char* filename,
   if(gltf_mesh_load(raw_data, &mesh)) return 2;
 
   mesh_b_load(context, mesh, mesh_b, model);
+  free(mesh.indices);
+  free(mesh.vertices);
   
   gltf_skin_load(context, raw_data, &model->textureIndex);
 
   cgltf_free(raw_data);
+
   
   return 0;
 }

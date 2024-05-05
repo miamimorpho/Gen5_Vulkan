@@ -1,5 +1,6 @@
 #include "textures.h"
 #include "vulkan_util.h"
+#include "destroyer.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../extern/stb_image.h"
@@ -150,7 +151,7 @@ texture_load(GfxContext context, unsigned char* pixels,
   copy_buffer_to_image(context, image_b.handle, texture->handle,
 		       (uint32_t)width, (uint32_t)height);
   
-  buffer_destroy(context, &image_b, 1);
+  buffer_destroy(context, image_b);
 
   transition_image_layout(context, texture->handle,
 			  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -162,6 +163,9 @@ texture_load(GfxContext context, unsigned char* pixels,
 		    VK_IMAGE_ASPECT_COLOR_BIT);
   sampler_create(context, &texture->sampler);
 
+  deferd_add( deferd_image, texture);
+ 
+  
   return 0;
 }
 
@@ -176,6 +180,8 @@ int texture_file_load(GfxContext context, const char* filename, uint32_t* index)
   }
   
   texture_load(context, pixels, x, y, n, index);
+  stbi_image_free(pixels);
+
   return 0;
 }
 
@@ -196,6 +202,7 @@ int texture_memory_load(GfxContext context, uint8_t* raw_pixels, size_t size,
   }
   
   texture_load(context, pixels, width, height, channels, index);
+  stbi_image_free(pixels);
   return 0;
 } 
 
@@ -231,15 +238,6 @@ texture_descriptors_update(GfxContext context, uint32_t count)
   return 0;
 }
 
-int textures_bind(GfxContext context, GfxShader shader){
-      
-  vkCmdBindDescriptorSets(context.command_buffer, 
-			  VK_PIPELINE_BIND_POINT_GRAPHICS,
-			  shader.pipeline_layout, 0, 1,
-			  &context.texture_descriptors, 0, NULL);
-
-  return 0;
-}
 
 int textures_free(GfxContext context){
   

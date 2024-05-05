@@ -1,6 +1,5 @@
-#include "vulkan_public.h"
+#include "model.h"
 #include "vulkan_util.h"
-//#include "textures.h"
 
 /*
  * Set = 1, Binding = Vert on 0
@@ -271,8 +270,50 @@ int model_pipeline_create(GfxContext context,
   return 0;
 }
 
+int
+model_descriptors_update(GfxContext context, model_shader_t* shader, size_t draw_count)
+{
+  shader->uniform_b = (GfxBuffer*)malloc(sizeof(GfxBuffer) * context.frame_c);
+  
+  for(unsigned int i = 0; i < context.frame_c; i++){
 
-int model_shader_create(GfxContext context, GfxShader* shader)
+    GfxBuffer* b = &shader->uniform_b[i];
+    VkDeviceSize size = draw_count * sizeof(drawArgs);
+    
+    buffer_create(context, b,
+		  (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT  
+		   | VK_BUFFER_USAGE_TRANSFER_DST_BIT), // usage
+		  (VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		   | VMA_ALLOCATION_CREATE_MAPPED_BIT ), // flags
+		  size);
+		 
+    VkDescriptorBufferInfo descriptor_buffer_info = {
+      .buffer = b->handle,
+      .offset = 0,
+      .range = size,
+    };    
+    VkWriteDescriptorSet descriptor_write = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = shader->descriptors[i],
+      .dstBinding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .pBufferInfo = &descriptor_buffer_info,
+    };
+  
+    vkUpdateDescriptorSets(context.l_dev, 1, &descriptor_write, 0, NULL);
+  }
+
+  buffer_create(context, &shader->indirect_b,
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+		(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		 | VMA_ALLOCATION_CREATE_MAPPED_BIT ),
+		draw_count * sizeof(VkDrawIndexedIndirectCommand));
+
+  return 0;
+}
+
+int model_shader_create(GfxContext context, model_shader_t* shader)
 {
   ssbo_descriptors_layout(context.l_dev, &shader->descriptors_layout);
   shader->descriptors =
@@ -292,7 +333,7 @@ int model_shader_create(GfxContext context, GfxShader* shader)
   return 0;
 }
     
-int pipeline_bind(GfxContext context, GfxShader shader){
+int model_shader_bind(GfxContext context, model_shader_t shader){
   VkViewport viewport = {
     .x = 0.0f,
     .y = 0.0f,
@@ -312,34 +353,98 @@ int pipeline_bind(GfxContext context, GfxShader shader){
   vkCmdBindPipeline(context.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	            shader.pipeline);
 
-  /* Bind Descriptors */
-  vkCmdBindDescriptorSets(context.command_buffer, 
+  vkCmdBindDescriptorSets(context.command_buffer,
 			  VK_PIPELINE_BIND_POINT_GRAPHICS,
-			  shader.pipeline_layout, 0, 1,
-			  &context.texture_descriptors, 0, NULL);
-
+			  shader.pipeline_layout, 1, 1,
+			  &shader.descriptors[context.current_frame_index],
+			  0, NULL);
+    
   return 0;
 }
 
+
 int
-pipeline_destroy(GfxContext context, GfxShader shader)
+model_matrix(Entity entity, mat4 *dest)
+{
+  mat4 model;
+  glm_mat4_identity(model);
+  glm_translate(model, entity.pos);
+  
+  mat4 model_rotate;
+  glm_quat_mat4(entity.rotate, model_rotate);
+  glm_mat4_mul(model, model_rotate, model); 
+  
+  glm_scale(model, (vec3){1.0f,1.0f,1.0f});
+  glm_mat4_copy(model, *dest);
+  
+  return 0;
+}
+
+void model_shader_draw(GfxContext context, model_shader_t shader,
+		       Camera cam, Entity* entities, int count){
+  mat4 view;
+  glm_look(cam.pos, cam.front, cam.up, view);
+
+  VmaAllocationInfo indirect;
+  vmaGetAllocationInfo(context.allocator,
+		       shader.indirect_b.allocation,
+		       &indirect);
+  
+  VmaAllocationInfo indirect_args;
+  vmaGetAllocationInfo(context.allocator,
+		       shader.uniform_b[context.current_frame_index].allocation,
+		       &indirect_args);
+  
+  for(int i = 0; i < count; i++){
+    Entity* entity = &entities[i];
+    // INDIRECT ARGS BUFFER
+    drawArgs *args_ptr = (drawArgs*)indirect_args.pMappedData + i;
+    args_ptr->texIndex = entity->model.textureIndex;
+    
+    mat4 model;
+    model_matrix(*entity, &model);
+  
+    // MVP matrix
+    mat4 vm;
+    glm_mat4_mul(view, model, vm);
+    glm_mat4_mul(cam.projection, vm, args_ptr->mvp);
+    
+    // Lighting Matrix
+    glm_mat4_inv(model, args_ptr->rotate_m);
+    glm_mat4_transpose(args_ptr->rotate_m);
+
+    // INDIRECT BUFFER
+    VkDrawIndexedIndirectCommand* indirect_ptr =
+      (VkDrawIndexedIndirectCommand*)indirect.pMappedData + i;
+    indirect_ptr->indexCount = entity->model.indexCount;
+    indirect_ptr->instanceCount = 1;
+    indirect_ptr->firstIndex = entity->model.firstIndex;
+    indirect_ptr->vertexOffset = entity->model.vertexOffset;
+    indirect_ptr->firstInstance = i;
+  }
+
+  vkCmdDrawIndexedIndirect(context.command_buffer, shader.indirect_b.handle, 0,
+			   count, sizeof(VkDrawIndexedIndirectCommand));
+}
+
+int
+model_shader_destroy(GfxContext context, model_shader_t* shader)
 {
 
+  free(shader->descriptors);
 
-  free(shader.descriptors);
-
-  buffer_destroy(context,
-		 shader.uniform_b,
+  buffers_destroy(context,
+		 shader->uniform_b,
 		 context.frame_c);
 
-  free(shader.uniform_b);
+  free(shader->uniform_b);
   
   buffer_destroy(context,
-		 &shader.indirect_b, 1);
+		 shader->indirect_b);
  
-  vkDestroyPipeline(context.l_dev, shader.pipeline, NULL);
-  vkDestroyPipelineLayout(context.l_dev, shader.pipeline_layout, NULL); 
-  vkDestroyDescriptorSetLayout(context.l_dev, shader.descriptors_layout, NULL); 
+  vkDestroyPipeline(context.l_dev, shader->pipeline, NULL);
+  vkDestroyPipelineLayout(context.l_dev, shader->pipeline_layout, NULL); 
+  vkDestroyDescriptorSetLayout(context.l_dev, shader->descriptors_layout, NULL); 
  
   return 0;
 }

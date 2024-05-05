@@ -11,19 +11,19 @@ main(void)
   textures_init(&context);
 
   /* Text Rendering + UI */
-  GfxShader ui;
-  text_shader_create(context, &ui);
+  gui_shader_create(context);
   GfxBuffer ui_mesh_b;
   mesh_b_create(context, &ui_mesh_b, 10000);
+  
   GfxFont font;
   gfx_font_load(context, &font, "textures/spleen-8x16-437-custom.bdf");
 
   /* 3D model shader */
-  GfxShader model_shader;
+  model_shader_t model_shader;
   model_shader_create(context, &model_shader);
   GfxBuffer model_mesh_b;
   mesh_b_create(context, &model_mesh_b, 100000);
-
+  
   /*-- Camera */
   Camera camera = camera_create(WIDTH, HEIGHT);
 
@@ -42,8 +42,8 @@ main(void)
     
   /*-- prepare descriptors for scene */
   texture_descriptors_update(context, 3);
-  indirect_b_create(context, &model_shader, model_c);
   //int text_index_c = text_render(context, font, "hello world", &ui_mesh_b);
+  model_descriptors_update(context, &model_shader, model_c);
   
   /* START OF DRAW LOOP */
   int running = 1;
@@ -56,25 +56,16 @@ main(void)
     
     draw_start(&context);
 
-    mesh_b_bind(context, model_mesh_b);
     vkCmdBindDescriptorSets(context.command_buffer, 
 			  VK_PIPELINE_BIND_POINT_GRAPHICS,
 			  model_shader.pipeline_layout, 0, 1,
 			  &context.texture_descriptors, 0, NULL);
 
-    
-    pipeline_bind(context, model_shader);
-
-    vkCmdBindDescriptorSets(context.command_buffer,
-			    VK_PIPELINE_BIND_POINT_GRAPHICS,
-			    model_shader.pipeline_layout, 1, 1,
-			    &model_shader.descriptors[context.current_frame_index],
-			    0, NULL);
-  
-
-    draw_entities(context, model_shader, camera, entities, model_c);
+    mesh_b_bind(context, model_mesh_b);    
+    model_shader_bind(context, model_shader);
+    model_shader_draw(context, model_shader, camera, entities, model_c);
       
-    pipeline_bind(context, ui);
+    gui_shader_bind(context);
     mesh_b_bind(context, ui_mesh_b);
     
     vkCmdDrawIndexed(context.command_buffer, text_index_c, 1, 0, 0, 0);
@@ -90,14 +81,10 @@ main(void)
   vkWaitForFences(context.l_dev, 1, fences, VK_TRUE, UINT64_MAX);
   vkResetCommandBuffer(context.command_buffer, 0);
 
-  textures_free(context);
-  //font_free(&font);
+  deferd_run(context);
 
-  pipeline_destroy(context, model_shader);
-  pipeline_destroy(context, ui);
-
-  buffer_destroy(context, &model_mesh_b, 1);
-  
+  model_shader_destroy(context, &model_shader);
+ 
   context_destroy(context);
     
   return 0;

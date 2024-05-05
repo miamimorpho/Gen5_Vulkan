@@ -73,18 +73,6 @@ typedef struct {
 } GfxContext;
 
 typedef struct {
-  
-  VkPipelineLayout pipeline_layout;
-  VkPipeline pipeline;
-
-  VkDescriptorSetLayout descriptors_layout;
-  VkDescriptorSet* descriptors;
-  GfxBuffer* uniform_b;
-  GfxBuffer indirect_b;
-
-} GfxShader;
-
-typedef struct {
  
   uint32_t firstIndex;
   uint32_t indexCount;
@@ -111,8 +99,8 @@ int buffer_create(GfxContext context, GfxBuffer* buffer,
 int buffer_append(GfxContext context, GfxBuffer *dest,
 		  const void* src, VkDeviceSize src_size);
 GfxBuffer* buffer_next(GfxContext, GfxBuffer);
-int  buffer_destroy(GfxContext, GfxBuffer*, int);
-
+int buffer_destroy(GfxContext, GfxBuffer);
+int buffers_destroy(GfxContext context, GfxBuffer* buffers, int count);
 void image_destroy(GfxContext, GfxImage);
 int image_create(GfxContext context,
 	     VkImage *image, VmaAllocation *image_alloc,
@@ -121,21 +109,5 @@ int image_create(GfxContext context,
 int image_view_create(VkDevice, VkImage, VkImageView*, VkFormat,
 		      VkImageAspectFlags);
 
-int model_shader_create(GfxContext context, GfxShader* shader);
-int pipeline_bind(GfxContext context, GfxShader shader);
-int pipeline_destroy(GfxContext context, GfxShader shader);
-
-int
-ssbo_descriptors_layout(VkDevice l_dev, VkDescriptorSetLayout* ssbo_layout);
-
-int
-ssbo_descriptors_alloc(GfxContext context,
-		       VkDescriptorSetLayout descriptors_layout,
-		       VkDescriptorSet* descriptor_sets,
-		       uint32_t count);
-int
-pipeline_layout_create(VkDevice l_dev,
-		       VkDescriptorSetLayout* descriptors_layouts,
-		       VkPipelineLayout* pipeline_layout);
 
 #endif /* RENDER_H */

@@ -3,25 +3,30 @@
 #include <string.h>
 
 int
-buffer_destroy(GfxContext context, GfxBuffer *buffers, int count)
+buffers_destroy(GfxContext context, GfxBuffer* buffers, int count){
+  int err;
+  for(int i = 0; i < count; i++)
+    err = buffer_destroy(context, buffers[i]);
+
+  return err;
+}
+
+int
+buffer_destroy(GfxContext context, GfxBuffer b)
 {
-  int err = 0;
   
-  for(int i = 0; i < count; i++){
-
-    GfxBuffer* b = &buffers[i];
-
-    VmaAllocationInfo b_info;
-    vmaGetAllocationInfo(context.allocator, b->allocation, &b_info);
+  int err = 0;
+ 
+  VmaAllocationInfo b_info;
+  vmaGetAllocationInfo(context.allocator, b.allocation, &b_info);
     
-    if(b_info.pUserData != NULL){
-      GfxBuffer* linked_buffer = (GfxBuffer*)b_info.pUserData;
-      err = buffer_destroy(context, linked_buffer, 1);
-    }
-
-    vmaDestroyBuffer(context.allocator, b->handle, b->allocation);
+  if(b_info.pUserData != NULL){
+    GfxBuffer* linked_buffer = (GfxBuffer*)b_info.pUserData;
+    err = buffer_destroy(context, *linked_buffer);
+    free(linked_buffer);
   }
-
+  
+  vmaDestroyBuffer(context.allocator, b.handle, b.allocation);
   return err;
 }
 
@@ -30,7 +35,7 @@ buffer_create(GfxContext context, GfxBuffer* buffer,
 	      VkBufferUsageFlags usage,
 	      VmaAllocatorCreateFlags flags,
 	      VkDeviceSize size){
-    
+ 
   VkBufferCreateInfo buffer_info = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .size = size,
@@ -90,7 +95,6 @@ GfxBuffer* buffer_next(GfxContext context, GfxBuffer first)
 void
 image_destroy(GfxContext context, GfxImage image)
 {
-  
   vkDestroySampler(context.l_dev, image.sampler, NULL);
   vkDestroyImageView(context.l_dev, image.view, NULL);
   vmaDestroyImage(context.allocator, image.handle, image.allocation);
